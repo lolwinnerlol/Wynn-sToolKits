@@ -1,0 +1,271 @@
+bl_info = {
+    "name": "Wynn's Toolkits",
+    "author": "suthiphan khamnong",
+    "version": (1, 0),
+    "blender": (5, 0, 0),
+    "location": "View3D > Sidebar > Wynn's Toolkits",
+    "description": "Collection of tools for projects",
+    "warning": "",
+    "doc_url": "",
+    "category": "Wynn's Toolkits",
+}
+
+import bpy
+from . import Animate
+
+
+# -------------------------------------------------------------------
+#   Update Functions
+# -------------------------------------------------------------------
+
+def update_overlay_visibility(self, context):
+    """Dynamically updates overlay visibility when the checkbox is toggled"""
+    # This function is called by the 'toggle_overlays' property update
+    # We need to ensure we are in a context where this makes sense
+    if context.space_data and context.space_data.type == 'VIEW_3D':
+        stored_props = context.window_manager.wynn_animator_props
+        
+        # Only execute the logic if the silhouette tool is currently active
+        if stored_props.is_silhouette_active:
+            overlay = context.space_data.overlay
+            
+            # If the user just checked the box, hide the overlays
+            if self.toggle_overlays:
+                # We also need to mark that we've taken control of the overlay state
+                if not stored_props.overlays_were_toggled:
+                    stored_props.show_overlays = overlay.show_overlays
+                    stored_props.overlays_were_toggled = True
+                overlay.show_overlays = False
+            # If the user unchecked the box, restore the original overlay state
+            else:
+                # Only restore if we were the ones who toggled them
+                if stored_props.overlays_were_toggled:
+                    overlay.show_overlays = stored_props.show_overlays
+                    stored_props.overlays_were_toggled = False
+
+
+# -------------------------------------------------------------------
+#   Addon Preferences & Properties
+# -------------------------------------------------------------------
+
+class WynnAnimatorAddonPreferences(bpy.types.AddonPreferences):
+    """Defines the preferences for the Wynnimate addon"""
+    bl_idname = __name__
+
+    toggle_overlays: bpy.props.BoolProperty(
+        name="Toggle Overlays",
+        description="Enable to automatically hide overlays when using the Silhouette Tool",
+        default=True,
+        update=update_overlay_visibility
+    )
+    silhouette_color: bpy.props.FloatVectorProperty(
+        name="Silhouette Color",
+        description="The color of the object Silhouettee",
+        subtype='COLOR',
+        default=(0.0, 0.0, 0.0), # Default to black
+        min=0.0, max=1.0
+    )
+    background_color: bpy.props.FloatVectorProperty(
+        name="Background Color",
+        description="The background color when Silhouette is active",
+        subtype='COLOR',
+        default=(1.0, 1.0, 1.0), # Default to white
+        min=0.0, max=1.0
+    )
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "toggle_overlays")
+        layout.label(text="Silhouette Tool Settings")
+        layout.prop(self, "silhouette_color")
+        layout.prop(self, "background_color")
+
+class WA_PG_viewport_storage(bpy.types.PropertyGroup):
+    """Stores the user's viewport settings before they are changed."""
+    is_silhouette_active: bpy.props.BoolProperty(
+        name="Is Silhouette Active",
+        description="Tracks if the silhouette mode is currently on",
+        default=False
+    )
+    overlays_were_toggled: bpy.props.BoolProperty(
+        name="Internal: Tracks if script toggled overlays",
+        description="Used to ensure we only restore overlay state if we changed it",
+        default=False
+    )
+    animation_tools_expanded: bpy.props.BoolProperty(
+        name="Animation Tools", 
+        default=True
+    )
+    playblast_expanded: bpy.props.BoolProperty(
+        name="Playblast", 
+        default=True
+    )
+    show_overlays: bpy.props.BoolProperty(name="Show Overlays")
+    light: bpy.props.StringProperty(name="Light")
+    color_type: bpy.props.StringProperty(name="Color Type")
+    single_color: bpy.props.FloatVectorProperty(name="Single Color", subtype='COLOR', size=3)
+    background_type: bpy.props.StringProperty(name="Background Type")
+    background_color: bpy.props.FloatVectorProperty(name="Background Color", subtype='COLOR', size=3)
+    wireframe_color_type: bpy.props.StringProperty(name="Wireframe Color Type")
+
+
+# -------------------------------------------------------------------
+#   Parent Panel
+# -------------------------------------------------------------------
+
+class WYNN_PT_main_panel(bpy.types.Panel):
+    """The main parent panel for all Wynn's Toolkits panels"""
+    bl_label = "Wynn's Toolkits"
+    bl_idname = "WYNN_PT_main_panel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Wynn's Toolkits"
+
+    def draw(self, context):
+        layout = self.layout
+
+# -------------------------------------------------------------------
+#   Sub Panels (Tabs)
+# -------------------------------------------------------------------
+
+class WYNN_PT_model_tab(bpy.types.Panel):
+    """Modeling Tools Tab"""
+    bl_label = "Model"
+    bl_idname = "WYNN_PT_model_tab"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Wynn's Toolkits"
+    bl_parent_id = "WYNN_PT_main_panel"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="Modeling tools will go here.")
+        # Example: row = layout.row()
+        # row.operator("mesh.primitive_cube_add")
+
+class WYNN_PT_animation_tab(bpy.types.Panel):
+    """Animation Tools Tab"""
+    bl_label = "Animation"
+    bl_idname = "WYNN_PT_animation_tab"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Wynn's Toolkits"
+    bl_parent_id = "WYNN_PT_main_panel"
+
+    def draw(self, context):
+        layout = self.layout
+        # Get addon preferences and custom properties
+        prefs = context.preferences.addons[__name__].preferences
+        props = context.window_manager.wynn_animator_props
+        scene = context.scene
+
+        # Main collapsible box
+        main_box = layout.box()
+        row = main_box.row()
+        row.prop(props, "animation_tools_expanded", 
+                 icon="DOWNARROW_HLT" if props.animation_tools_expanded else "RIGHTARROW",
+                 text="WynnAnimate (SHIFT+V)", emboss=False)
+
+        if props.animation_tools_expanded:
+            # Viewport Tools Section
+            vp_box = main_box.box()
+            vp_box.label(text="Viewport")
+            vp_box.operator("wm.silhouette_tool", text="Toggle Silhouette", icon='HIDE_ON')
+            vp_box.prop(prefs, "toggle_overlays")
+            
+            # Color Settings
+            col = vp_box.column(align=True)
+            col.prop(prefs, "silhouette_color", text="Object Color")
+            col.prop(prefs, "background_color", text="BG Color")
+
+            # Motion Paths Section
+            mp_box = main_box.box()
+            mp_box.label(text="Motion Paths")
+            row = mp_box.row(align=True)
+            row.operator("wm.calculate_motion_path", text="Calculate", icon='ACTION_TWEAK')
+            row.operator("wm.update_motion_path", text="Update", icon='FILE_REFRESH')
+            mp_box.operator("wm.clear_motion_path", text="Clear All Paths", icon='X')
+
+        # Playblast Section
+        pb_box = layout.box()
+        row = pb_box.row()
+        row.prop(props, "playblast_expanded", 
+                 icon="DOWNARROW_HLT" if props.playblast_expanded else "RIGHTARROW",
+                 text="Playblast", emboss=False)
+
+        if props.playblast_expanded:
+            col = pb_box.column()
+            col.prop(scene, "playblast_note", text="Animator ")
+            col.operator("anim.playblast", text="Render Playblast", icon='RENDER_ANIMATION')
+
+
+class WYNN_PT_rig_tab(bpy.types.Panel):
+    """Rigging Tools Tab"""
+    bl_label = "Rig"
+    bl_idname = "WYNN_PT_rig_tab"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Wynn's Toolkits"
+    bl_parent_id = "WYNN_PT_main_panel"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="Rigging tools will go here.")
+
+class WYNN_PT_extra_tab(bpy.types.Panel):
+    """Extra Tools Tab"""
+    bl_label = "Extra"
+    bl_idname = "WYNN_PT_extra_tab"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Wynn's Toolkits"
+    bl_parent_id = "WYNN_PT_main_panel"
+
+    def draw(self, context):
+        layout = self.layout
+        # Change the URL below to your actual documentation link
+        layout.operator("wm.url_open", text="Documentation", icon='HELP').url = "https://www.google.com"
+
+
+# -------------------------------------------------------------------
+#   Registration
+# -------------------------------------------------------------------
+
+# Create a list of all classes to register
+# To add a new panel, create the class and add it to this list
+classes_to_register = [
+    WYNN_PT_main_panel,
+    WYNN_PT_model_tab,
+    WYNN_PT_animation_tab,
+    WYNN_PT_rig_tab,
+    WYNN_PT_extra_tab,
+    WynnAnimatorAddonPreferences,
+    WA_PG_viewport_storage,
+]
+
+def register():
+    for cls in classes_to_register:
+        bpy.utils.register_class(cls)
+    
+    # Register the submodule
+    Animate.register()
+
+    # Attach the property group to the WindowManager
+    bpy.types.WindowManager.wynn_animator_props = bpy.props.PointerProperty(
+        type=WA_PG_viewport_storage
+    )
+
+
+def unregister():
+    # Unregister the submodule first
+    Animate.unregister()
+
+    # Delete the custom property from the WindowManager
+    del bpy.types.WindowManager.wynn_animator_props
+
+    # Unregister in reverse order to avoid errors
+    for cls in reversed(classes_to_register):
+        bpy.utils.unregister_class(cls)
+
+if __name__ == "__main__":
+    register()
