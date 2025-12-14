@@ -11,7 +11,7 @@ bl_info = {
 }
 
 import bpy
-from . import Animate
+from . import Animate, Model
 
 
 # -------------------------------------------------------------------
@@ -96,6 +96,10 @@ class WA_PG_viewport_storage(bpy.types.PropertyGroup):
         name="Animation Tools", 
         default=True
     )
+    model_tools_expanded: bpy.props.BoolProperty(
+        name="Model Tools",
+        default=True
+    )
     playblast_expanded: bpy.props.BoolProperty(
         name="Playblast", 
         default=True
@@ -128,6 +132,8 @@ class WYNN_PT_main_panel(bpy.types.Panel):
 #   Sub Panels (Tabs)
 # -------------------------------------------------------------------
 
+
+
 class WYNN_PT_model_tab(bpy.types.Panel):
     """Modeling Tools Tab"""
     bl_label = "Model"
@@ -139,9 +145,17 @@ class WYNN_PT_model_tab(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="Modeling tools will go here.")
-        # Example: row = layout.row()
-        # row.operator("mesh.primitive_cube_add")
+        props = context.window_manager.wynn_animator_props
+
+        # Main collapsible box
+        main_box = layout.box()
+        row = main_box.row()
+        row.prop(props, "model_tools_expanded",
+                 icon="DOWNARROW_HLT" if props.model_tools_expanded else "RIGHTARROW",
+                 text="Vertex Color ID", emboss=False)
+
+        if props.model_tools_expanded:
+            bpy.types.OBJECT_PT_vertex_color_id.draw(self, context)
 
 class WYNN_PT_animation_tab(bpy.types.Panel):
     """Animation Tools Tab"""
@@ -195,6 +209,7 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
 
         if props.playblast_expanded:
             col = pb_box.column()
+            col.prop(scene, "playblast_shot_name", text="Cut Name")
             col.prop(scene, "playblast_note", text="Animator ")
             col.operator("anim.playblast", text="Render Playblast", icon='RENDER_ANIMATION')
 
@@ -224,7 +239,7 @@ class WYNN_PT_extra_tab(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         # Change the URL below to your actual documentation link
-        layout.operator("wm.url_open", text="Documentation", icon='HELP').url = "https://www.google.com"
+        layout.operator("wm.url_open", text="GitHub & Documentation", icon='HELP').url = "https://github.com/lolwinnerlol/Wynn-sToolKits"
 
 
 # -------------------------------------------------------------------
@@ -249,6 +264,7 @@ def register():
     
     # Register the submodule
     Animate.register()
+    Model.register()
 
     # Attach the property group to the WindowManager
     bpy.types.WindowManager.wynn_animator_props = bpy.props.PointerProperty(
@@ -259,6 +275,7 @@ def register():
 def unregister():
     # Unregister the submodule first
     Animate.unregister()
+    Model.unregister()
 
     # Delete the custom property from the WindowManager
     del bpy.types.WindowManager.wynn_animator_props

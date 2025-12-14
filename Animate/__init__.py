@@ -31,6 +31,11 @@ def register():
         description="Note to be included in the playblast metadata",
         default=""
     )
+    bpy.types.Scene.playblast_shot_name = StringProperty(
+        name="Cut Name",
+        description="Name of the cut for the output filename",
+        default="Cut_01"
+    )
 
     # --- Keymap Registration ---
     # This creates the Shift+V shortcut
@@ -52,6 +57,7 @@ def unregister():
     addon_keymaps.clear()
 
     del bpy.types.Scene.playblast_note
+    del bpy.types.Scene.playblast_shot_name
 
     # Unregister all classes in reverse order to avoid dependency issues
     for cls in reversed(classes):
