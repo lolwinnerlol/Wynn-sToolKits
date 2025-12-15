@@ -209,7 +209,10 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
 
         if props.playblast_expanded:
             col = pb_box.column()
-            col.prop(scene, "playblast_shot_name", text="Cut Name")
+            col.prop(scene, "playblast_process", text="Process")
+            if scene.playblast_process == 'OTHERS':
+                col.prop(scene, "playblast_process_custom", text="Custom")
+            col.prop(scene, "playblast_version", text="Version")
             col.prop(scene, "playblast_note", text="Animator ")
             col.operator("anim.playblast", text="Render Playblast", icon='RENDER_ANIMATION')
 

@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import StringProperty
+from bpy.props import StringProperty, EnumProperty
 
 from . import silhouette
 from . import motion_path
@@ -29,12 +29,28 @@ def register():
     bpy.types.Scene.playblast_note = StringProperty(
         name="Note",
         description="Note to be included in the playblast metadata",
-        default=""
+        default="Name here"
     )
-    bpy.types.Scene.playblast_shot_name = StringProperty(
-        name="Cut Name",
-        description="Name of the cut for the output filename",
-        default="Cut_01"
+    bpy.types.Scene.playblast_process = EnumProperty(
+        name="Process",
+        description="Animation Process Stage",
+        items=[
+            ('LAYOUT', "Layout", ""),
+            ('BLOCKING', "Blocking", ""),
+            ('SPLINING', "Splining", ""),
+            ('FINAL', "Final", ""),
+            ('OTHERS', "Others", ""),
+        ],
+        default='BLOCKING'
+    )
+    bpy.types.Scene.playblast_process_custom = StringProperty(
+        name="Custom Process",
+        default="WIP"
+    )
+    bpy.types.Scene.playblast_version = StringProperty(
+        name="Version",
+        description="Version number",
+        default="01"
     )
 
     # --- Keymap Registration ---
@@ -57,7 +73,9 @@ def unregister():
     addon_keymaps.clear()
 
     del bpy.types.Scene.playblast_note
-    del bpy.types.Scene.playblast_shot_name
+    del bpy.types.Scene.playblast_process
+    del bpy.types.Scene.playblast_process_custom
+    del bpy.types.Scene.playblast_version
 
     # Unregister all classes in reverse order to avoid dependency issues
     for cls in reversed(classes):
