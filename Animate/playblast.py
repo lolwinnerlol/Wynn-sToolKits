@@ -1,6 +1,7 @@
 
 import bpy
 import os
+import re
 
 class ANIM_OT_playblast(bpy.types.Operator):
     """Render a playblast with metadata"""
@@ -44,6 +45,16 @@ class ANIM_OT_playblast(bpy.types.Operator):
         original_frame_start = scene.frame_start
         original_frame_end = scene.frame_end
 
+        # Store and Set Viewport settings
+        original_shading_color = None
+        original_wireframe_color = None
+        if context.space_data and context.space_data.type == 'VIEW_3D':
+            original_shading_color = context.space_data.shading.color_type
+            original_wireframe_color = context.space_data.shading.wireframe_color_type
+            
+            context.space_data.shading.color_type = 'TEXTURE'
+            context.space_data.shading.wireframe_color_type = 'THEME'
+
         # Set output path
         output_dir = r"X:\My Drive\50_Render_Output\00_Blender\Playblast"
         if not os.path.exists(output_dir):
@@ -55,13 +66,15 @@ class ANIM_OT_playblast(bpy.types.Operator):
 
         # Determine base filename root
         if bpy.data.filepath:
-            base_name_root = os.path.splitext(os.path.basename(bpy.data.filepath))[0]
-            # Always clean up existing cut info from filename (e.g. _C01)
-            parts = base_name_root.split('_')
-            if len(parts) > 1 and parts[-1].startswith('C') and any(c.isdigit() for c in parts[-1]):
-                base_name_root = "_".join(parts[:-1])
+            filename = os.path.splitext(os.path.basename(bpy.data.filepath))[0]
+            base_name_root = re.sub(r'SC\d+', scene.name, filename, flags=re.IGNORECASE)
         else:
-            base_name_root = "Playblast"
+            base_name_root = scene.name
+
+        # Always clean up existing cut info from name (e.g. _C01)
+        parts = base_name_root.split('_')
+        if len(parts) > 1 and parts[-1].startswith('C') and any(c.isdigit() for c in parts[-1]):
+            base_name_root = "_".join(parts[:-1])
 
         # Get Process and Version strings
         if scene.playblast_process == 'OTHERS':
@@ -157,5 +170,11 @@ class ANIM_OT_playblast(bpy.types.Operator):
         scene.render.ffmpeg.format = original_ffmpeg_format
         scene.render.ffmpeg.codec = original_ffmpeg_codec
         scene.render.use_file_extension = original_use_file_extension
+
+        # Restore Viewport settings
+        if original_shading_color:
+            context.space_data.shading.color_type = original_shading_color
+        if original_wireframe_color:
+            context.space_data.shading.wireframe_color_type = original_wireframe_color
 
         return {'FINISHED'}

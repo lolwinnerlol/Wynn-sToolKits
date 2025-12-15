@@ -1,17 +1,17 @@
 bl_info = {
     "name": "Wynn's Toolkits",
     "author": "suthiphan khamnong",
-    "version": (1, 0),
+    "version": (1, 2),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > Wynn's Toolkits",
     "description": "Collection of tools for projects",
     "warning": "",
-    "doc_url": "",
+    "doc_url": "https://github.com/lolwinnerlol/Wynn-sToolKits",
     "category": "Wynn's Toolkits",
 }
 
 import bpy
-from . import Animate, Model
+from . import Animate, Model, Rig                                                 
 
 
 # -------------------------------------------------------------------
@@ -112,6 +112,17 @@ class WA_PG_viewport_storage(bpy.types.PropertyGroup):
     background_color: bpy.props.FloatVectorProperty(name="Background Color", subtype='COLOR', size=3)
     wireframe_color_type: bpy.props.StringProperty(name="Wireframe Color Type")
 
+
+class WYNN_PG_rig_props(bpy.types.PropertyGroup):
+    """Stores properties for the rigging toolkit."""
+    weight_mode_on: bpy.props.BoolProperty(
+        name="Weight Mode",
+        description="Isolate Deform bone for weight painting",
+        default=False
+    )
+    collection_visibility: bpy.props.StringProperty(
+        name="Stored Bone Collection Visibility"
+    )
 
 # -------------------------------------------------------------------
 #   Parent Panel
@@ -228,7 +239,9 @@ class WYNN_PT_rig_tab(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="Rigging tools will go here.")
+        layout.label(text="Weighting Tools")
+        row = layout.row()
+        row.operator("wynn.parent_binary_weights", text="Parent Binary Weights", icon='GROUP_BONE')
 
 class WYNN_PT_extra_tab(bpy.types.Panel):
     """Extra Tools Tab"""
@@ -259,7 +272,10 @@ classes_to_register = [
     WYNN_PT_extra_tab,
     WynnAnimatorAddonPreferences,
     WA_PG_viewport_storage,
+    WYNN_PG_rig_props,
 ]
+
+addon_keymaps = []
 
 def register():
     for cls in classes_to_register:
@@ -268,20 +284,49 @@ def register():
     # Register the submodule
     Animate.register()
     Model.register()
+    Rig.register()
 
     # Attach the property group to the WindowManager
     bpy.types.WindowManager.wynn_animator_props = bpy.props.PointerProperty(
         type=WA_PG_viewport_storage
     )
+    bpy.types.WindowManager.wynn_rig_props = bpy.props.PointerProperty(
+        type=WYNN_PG_rig_props
+    )
+    
+    # Register Keymaps
+    wm = bpy.context.window_manager
+    kc = wm.keyconfigs.addon
+    if kc:
+        km = kc.keymaps.new(name='3D View', space_type='VIEW_3D')
+        kmi = km.keymap_items.new('wm.call_menu_pie', 'V', 'PRESS')
+        kmi.properties.name = Rig.pie.VIEW3D_MT_pie_rig_helpers.bl_idname
+        addon_keymaps.append((km, kmi))
+    
+    print(r"""
+ _       __                 _          ______            ______                ___ ___
+| |     / /_  ______  ____ ( )_____   /_  __/___  ____  / / __ )____  _  __   <  /<  /
+| | /| / / / / / __ \/ __ \|// ___/    / / / __ \/ __ \/ / __  / __ \| |/_/   / / / / 
+| |/ |/ / /_/ / / / / / / / (__  )    / / / /_/ / /_/ / / /_/ / /_/ />  <    / / / /  
+|__/|__/\__, /_/ /_/_/ /_/ /____/    /_/  \____/\____/_/_____/\____/_/|_|   /_(_)_/   
+       /____/                                                                         
+    """)
 
 
 def unregister():
+    # Unregister Keymaps
+    for km, kmi in addon_keymaps:
+        km.keymap_items.remove(kmi)
+    addon_keymaps.clear()
+
     # Unregister the submodule first
     Animate.unregister()
     Model.unregister()
+    Rig.unregister()
 
     # Delete the custom property from the WindowManager
     del bpy.types.WindowManager.wynn_animator_props
+    del bpy.types.WindowManager.wynn_rig_props
 
     # Unregister in reverse order to avoid errors
     for cls in reversed(classes_to_register):

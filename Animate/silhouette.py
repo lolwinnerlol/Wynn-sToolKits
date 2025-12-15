@@ -10,7 +10,8 @@ class WM_OT_silhouette_tool(bpy.types.Operator):
     def execute(self, context):
         # Access our custom properties stored on the window manager
         stored_props = context.window_manager.wynn_animator_props
-        prefs = context.preferences.addons["Wynn's Toolkits"].preferences
+        addon_name = __package__.split(".")[0]
+        prefs = context.preferences.addons[addon_name].preferences
         
         # Ensure the operator is being called from a 3D Viewport
         if context.space_data.type != 'VIEW_3D':
