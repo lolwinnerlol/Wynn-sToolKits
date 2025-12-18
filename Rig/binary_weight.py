@@ -1,103 +1,106 @@
 import bpy
-import mathutils
 
-def get_bone_deform_matrices(armature_obj, target_bone_names=None):
+def apply_binary_weights(mesh_obj, armature_obj, target_bone_names=None, from_weight_paint=False):
     """
-    Returns a dictionary of bone names to their world space head/tail vectors.
-    We use Edit Bones if in Edit Mode, otherwise Pose Bones.
+    Applies binary weights (0.0 or 1.0) using Auto Weights (Heat) + Limit Total.
+    Includes robust context switching to avoid poll() errors.
     """
-    bones = {}
-    mw = armature_obj.matrix_world
+    original_mode = bpy.context.mode
     
-    # We use pose bones to get the current state of the armature
-    for pbone in armature_obj.pose.bones:
-        # Check if bone is deform enabled
-        if pbone.bone.use_deform:
-            # Check selection if requested (filter by name list)
-            if target_bone_names is not None and pbone.name not in target_bone_names:
-                continue
+    restore_deform_settings = []
+    try:
+        # Manage 'Selected Bones Only' logic by isolating deform bones
+        if target_bone_names and not from_weight_paint:
+            for bone in armature_obj.data.bones:
+                if bone.name in target_bone_names:
+                    if not bone.use_deform:
+                        restore_deform_settings.append((bone, False))
+                        bone.use_deform = True
+                else:
+                    if bone.use_deform:
+                        restore_deform_settings.append((bone, True))
+                        bone.use_deform = False
 
-            # Get head and tail in World Space
-            head = mw @ pbone.head
-            tail = mw @ pbone.tail
-            bones[pbone.name] = (head, tail, pbone.bone.length)
+        # --- PATH 1: Called from Weight Paint Mode ---
+        if from_weight_paint:
+            # 1. Calculate Auto Weights using only the isolated deform bones
+            # This operates on the whole mesh but is a necessary starting point.
+            # 1. Prepare selection mask
+            # We switch to Edit and back to ensure the vertex selection is a valid mask.
+            bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
+
+            # 2. Calculate Auto Weights using only the isolated deform bones
+            try:
+                bpy.ops.paint.weight_from_bones(type='AUTOMATIC')
+            except RuntimeError:
+                print("ERROR: Bone Heat Weighting failed. Check mesh geometry.")
+                return {'HEAT_FAILED'}
             
-    return bones
+            # 3. Process weights (Binarize)
+            bpy.ops.object.vertex_group_limit_total(limit=1)
+            bpy.ops.object.vertex_group_clean(group_select_mode='ALL', limit=0.5)
+            bpy.ops.object.vertex_group_normalize_all(lock_active=False)
 
-def get_distance_to_segment(v, a, b):
-    """
-    Calculates the squared distance from vertex v to the line segment ab.
-    v: vertex point
-    a: bone head
-    b: bone tail
-    Using squared distance is faster (avoids square roots).
-    """
-    ab = b - a
-    av = v - a
-    
-    # Project v onto the line ab to find the closest point
-    if ab.length_squared == 0:
-        return (v - a).length_squared
-        
-    t = av.dot(ab) / ab.length_squared
-    
-    # Clamp t to the segment [0, 1]
-    t = max(0.0, min(1.0, t))
-    
-    # Closest point on the segment
-    closest_point = a + t * ab
-    
-    return (v - closest_point).length_squared
+        # --- PATH 2: Called from Object Mode ---
+        else:
+            # 1. Setup selection for parenting
+            bpy.ops.object.mode_set(mode='OBJECT')
+            bpy.ops.object.select_all(action='DESELECT')
+            mesh_obj.select_set(True)
+            armature_obj.select_set(True)
+            bpy.context.view_layer.objects.active = armature_obj
+            
+            existing_mod_names = {m.name for m in mesh_obj.modifiers if m.type == 'ARMATURE'}
 
-def apply_binary_weights(mesh_obj, armature_obj, target_bone_names=None):
-    # 1. Get Mesh Data
-    mesh = mesh_obj.data
-    
-    # 2. Get Bone Data (World Space)
-    # Map: bone_name -> (head, tail, length)
-    bone_data = get_bone_deform_matrices(armature_obj, target_bone_names=target_bone_names)
-    bone_names = list(bone_data.keys())
-    
-    if not bone_names:
+            # 2. Parent and calculate Auto Weights (Heat)
+            try:
+                bpy.ops.object.parent_set(type='ARMATURE_AUTO')
+            except RuntimeError:
+                print("ERROR: Bone Heat Weighting failed. Check mesh geometry.")
+                return {'HEAT_FAILED'}
+
+            # Clean up duplicate modifiers if one already existed
+            new_mods = [m for m in mesh_obj.modifiers if m.type == 'ARMATURE' and m.name not in existing_mod_names]
+            if existing_mod_names and new_mods:
+                for mod in new_mods:
+                    mesh_obj.modifiers.remove(mod)
+
+            # 3. Process weights on the ENTIRE mesh
+            bpy.ops.object.mode_set(mode='OBJECT')
+            bpy.ops.object.select_all(action='DESELECT')
+            mesh_obj.select_set(True)
+            bpy.context.view_layer.objects.active = mesh_obj
+
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='SELECT') # Select all vertices
+            bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
+            
+            bpy.context.object.data.use_paint_mask_vertex = True
+
+            bpy.ops.object.vertex_group_limit_total(limit=1)
+            bpy.ops.object.vertex_group_normalize_all(lock_active=False)
+            bpy.ops.object.vertex_group_clean(group_select_mode='ALL', limit=0.001)
+
+        print(f"Rigid binding applied to {mesh_obj.name}")
+        return {'FINISHED'}
+
+    except Exception as e:
+        print(f"Error applying binary weights: {e}")
         return {'CANCELLED'}
 
-    # 3. Create Vertex Groups
-    # Clear old groups to ensure clean binary state
-    mesh_obj.vertex_groups.clear()
-    
-    # Create groups and store references for speed
-    group_lookup = {}
-    for name in bone_names:
-        group_lookup[name] = mesh_obj.vertex_groups.new(name=name)
-
-    # 4. Calculation Loop
-    # For every vertex, find the closest bone segment
-    
-    # Pre-calculate world space coordinates for all vertices
-    mw = mesh_obj.matrix_world
-    # Note: For massive meshes, we could use numpy here for speed
-    verts_world = [mw @ v.co for v in mesh.vertices]
-    
-    print(f"Processing {len(verts_world)} vertices...")
-    
-    for i, v_pos in enumerate(verts_world):
-        best_dist = float('inf')
-        best_bone = None
-        
-        # Check against every bone
-        for name, (head, tail, length) in bone_data.items():
-            # Distance from point to line segment
-            dist = get_distance_to_segment(v_pos, head, tail)
+    finally:
+        # Restore Bone Settings
+        for bone, orig_val in restore_deform_settings:
+            bone.use_deform = orig_val
             
-            if dist < best_dist:
-                best_dist = dist
-                best_bone = name
-        
-        # 5. Assign Weight
-        # We assume every vertex has at least one bone.
-        if best_bone:
-            # Assign strictly 1.0
-            group_lookup[best_bone].add([i], 1.0, 'REPLACE')
+        # Restore original mode if it was a valid one
+        if original_mode in {'EDIT', 'POSE', 'WEIGHT_PAINT', 'OBJECT'}:
+            try:
+                # Avoid setting mode if context is wrong (e.g. no active object)
+                if bpy.context.view_layer.objects.active:
+                    bpy.ops.object.mode_set(mode=original_mode)
+            except:
+                pass
 
 class WYNN_OT_parent_binary_weights(bpy.types.Operator):
     """Parent with Binary (1.0/0.0) Weights"""
@@ -111,56 +114,111 @@ class WYNN_OT_parent_binary_weights(bpy.types.Operator):
         default=False
     )
 
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None and context.mode == 'OBJECT'
+
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
-        # Basic Selection Validation
-        if len(context.selected_objects) < 2:
-            self.report({'ERROR'}, "Select Mesh then Armature")
-            return {'CANCELLED'}
-            
-        armature = context.active_object
         mesh_obj = None
+        armature = None
         
-        # Find the non-active selected object (the mesh)
-        for obj in context.selected_objects:
-            if obj != armature and obj.type == 'MESH':
-                mesh_obj = obj
-                break
-                
-        if not mesh_obj or armature.type != 'ARMATURE':
-            self.report({'ERROR'}, "Active object must be Armature, selected must be Mesh")
+        active = context.active_object
+        selected = context.selected_objects
+
+        if active and active.type == 'ARMATURE':
+            armature = active
+            for obj in selected:
+                if obj.type == 'MESH':
+                    mesh_obj = obj
+                    break
+        elif active and active.type == 'MESH':
+            mesh_obj = active
+            # Find armature from parent or modifier
+            if mesh_obj.parent and mesh_obj.parent.type == 'ARMATURE':
+                armature = mesh_obj.parent
+            else:
+                for mod in mesh_obj.modifiers:
+                    if mod.type == 'ARMATURE' and mod.object:
+                        armature = mod.object
+                        break
+                        
+        if not mesh_obj or not armature:
+            self.report({'ERROR'}, "Selection must include a Mesh and an Armature.")
             return {'CANCELLED'}
 
-        # Handle Selection Logic (Blender 4.0+ fix for Bone.select removal)
         target_bone_names = None
         if self.use_selected_bones:
-            # Switch to Pose Mode temporarily to get selection
-            prev_mode = armature.mode
-            if prev_mode != 'POSE':
-                bpy.ops.object.mode_set(mode='POSE')
+            # We need to be in pose mode to get selected_pose_bones
+            prev_active = context.view_layer.objects.active
+            context.view_layer.objects.active = armature
+            was_pose = (armature.mode == 'POSE')
+            if not was_pose: bpy.ops.object.mode_set(mode='POSE')
             
             target_bone_names = {pb.name for pb in context.selected_pose_bones}
             
-            if prev_mode != 'POSE':
-                bpy.ops.object.mode_set(mode=prev_mode)
-                
+            if not was_pose: bpy.ops.object.mode_set(mode='OBJECT')
+            context.view_layer.objects.active = prev_active
+            
             if not target_bone_names:
-                self.report({'WARNING'}, "No bones selected in Pose Mode.")
+                self.report({'WARNING'}, "'Selected Bones Only' is checked, but no bones are selected.")
                 return {'CANCELLED'}
 
-        # 1. Parent the mesh (Empty Groups)
-        if context.mode != 'OBJECT':
-            bpy.ops.object.mode_set(mode='OBJECT')
-        bpy.ops.object.parent_set(type='ARMATURE')
+        result = apply_binary_weights(mesh_obj, armature, target_bone_names, from_weight_paint=False)
         
-        # 2. Run the math
-        res = apply_binary_weights(mesh_obj, armature, target_bone_names=target_bone_names)
-        
-        if res == {'CANCELLED'}:
-            self.report({'WARNING'}, "No suitable bones found (check selection or deform settings).")
+        if result == {'HEAT_FAILED'}:
+            self.report({'ERROR'}, "Bone Heat Failed: Mesh has holes, overlaps, or bad scale.")
+        elif result == {'CANCELLED'}:
+            self.report({'ERROR'}, "Script Failed. Check System Console.")
+            
+        return result
+
+class WYNN_OT_assign_binary_weights(bpy.types.Operator):
+    """Assign Binary (1.0/0.0) Weights to selected bones"""
+    bl_idname = "wynn.assign_binary_weights"
+    bl_label = "Assign Binary Weight to Bone"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.active_object and 
+                context.active_object.type == 'MESH' and 
+                context.mode == 'PAINT_WEIGHT')
+
+    def execute(self, context):
+        mesh_obj = context.active_object
+        armature = None
+        # Find the armature from the mesh's modifiers
+        for mod in mesh_obj.modifiers:
+            if mod.type == 'ARMATURE' and mod.object:
+                armature = mod.object
+                break
+
+        if not armature:
+            self.report({'ERROR'}, "No Armature modifier found on the active object.")
             return {'CANCELLED'}
 
-        self.report({'INFO'}, "Binary Weights Applied.")
-        return {'FINISHED'}
+        # In Weight Paint mode, selected pose bones are in context.selected_pose_bones
+        target_bone_names = {pb.name for pb in context.selected_pose_bones}
+
+        result = apply_binary_weights(mesh_obj, armature, target_bone_names, from_weight_paint=True)
+
+        if result == {'HEAT_FAILED'}:
+            self.report({'ERROR'}, "Bone Heat Failed: Mesh has holes, overlaps, or bad scale.")
+        elif result == {'CANCELLED'}:
+            self.report({'ERROR'}, "Script Failed. Check System Console.")
+            
+        return result
+
+def register():
+    bpy.utils.register_class(WYNN_OT_parent_binary_weights)
+    bpy.utils.register_class(WYNN_OT_assign_binary_weights)
+
+def unregister():
+    bpy.utils.unregister_class(WYNN_OT_parent_binary_weights)
+    bpy.utils.unregister_class(WYNN_OT_assign_binary_weights)
+
+if __name__ == "__main__":
+    register()

@@ -6,6 +6,21 @@ class WYNN_OT_smooth_weights(bpy.types.Operator):
     bl_label = "Smooth Weights Symmetrically"
     bl_options = {'REGISTER', 'UNDO'}
 
+    factor: bpy.props.FloatProperty(
+        name="Factor",
+        description="Intensity of the smoothing",
+        default=0.5,
+        min=0.0,
+        max=1.0
+    )
+
+    iterations: bpy.props.IntProperty(
+        name="Iterations",
+        description="Number of times to repeat smoothing",
+        default=1,
+        min=1
+    )
+
     @classmethod
     def poll(cls, context):
         return (context.object is not None and
@@ -19,7 +34,9 @@ class WYNN_OT_smooth_weights(bpy.types.Operator):
         active_group_name = active_group.name
 
         # Initial smooth on the active group
-        bpy.ops.object.vertex_group_smooth()
+        bpy.ops.object.vertex_group_smooth(factor=self.factor, repeat=self.iterations)
+        bpy.ops.object.vertex_group_normalize_all(group_select_mode='BONE_DEFORM')
+
 
         # Check for symmetrical group and smooth the counterpart
         symmetrical_group_name = self.get_symmetrical_group(active_group_name)
@@ -31,7 +48,9 @@ class WYNN_OT_smooth_weights(bpy.types.Operator):
             obj.vertex_groups.active_index = obj.vertex_groups[symmetrical_group_name].index
             
             # Smooth the symmetrical group
-            bpy.ops.object.vertex_group_smooth()
+            bpy.ops.object.vertex_group_smooth(factor=self.factor, repeat=self.iterations)
+            bpy.ops.object.vertex_group_normalize_all(group_select_mode='BONE_DEFORM')
+
             
             # Restore the original active group
             obj.vertex_groups.active_index = original_active_group_index

@@ -9,9 +9,13 @@ class VIEW3D_MT_pie_rig_helpers(bpy.types.Menu):
         layout = self.layout
         pie = layout.menu_pie()
         wynn_props = context.window_manager.wynn_rig_props
+        is_weight_paint = context.mode == 'PAINT_WEIGHT'
 
         # Left
-        pie.operator("wynn.parent_binary_weights", text="Parent Binary Weights", icon='GROUP_BONE')
+        if is_weight_paint:
+            pie.operator("wynn.assign_binary_weights", text="Assign Binary Weight", icon='GROUP_BONE')
+        else:
+            pie.operator("wynn.parent_binary_weights", text="Parent Binary Weights", icon='GROUP_BONE')
         
         # Right
         pie.operator("wynn.smooth_weights", text="Smooth Symmetrize", icon='SMOOTHCURVE')
@@ -23,7 +27,6 @@ class VIEW3D_MT_pie_rig_helpers(bpy.types.Menu):
             pie.operator("wynn.toggle_weight_mode", text="Deform Bone: OFF", icon='HIDE_OFF', depress=False)
             
         # Top-Right
-        is_weight_paint = context.active_object and context.active_object.mode == 'WEIGHT_PAINT'
         if is_weight_paint:
             pie.operator("wynn.setup_weight_paint", text="Exit Paint Mode", icon='OBJECT_DATAMODE', depress=True)
         else:

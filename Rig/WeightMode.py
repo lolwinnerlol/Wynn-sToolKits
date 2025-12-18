@@ -65,17 +65,30 @@ class WYNN_OT_toggle_weight_mode(bpy.types.Operator):
             return
 
         # Store current visibility
-        visibility_store = {}
+        visibility_data = {
+            "collections": {},
+            "wireframes": {}
+        }
+
         for coll in armature.data.collections:
-            visibility_store[coll.name] = coll.is_visible
-        
-        # Using json to be safe, though a simple str cast of a dict would also work
-        import json
-        wynn_props.collection_visibility = json.dumps(visibility_store)
+            visibility_data["collections"][coll.name] = coll.is_visible
 
         # Set new visibility
-        for coll in armature.data.collections:
-            coll.is_visible = (coll == deform_collection)
+        deform_collection.is_solo = True
+
+        # Turn on wireframe and store state
+        def enable_wireframe_recursive(obj):
+            if obj.type == 'MESH':
+                visibility_data["wireframes"][obj.name] = obj.show_wire
+                obj.show_wire = True
+            for child in obj.children:
+                enable_wireframe_recursive(child)
+        
+        enable_wireframe_recursive(armature)
+
+        # Using json to be safe
+        import json
+        wynn_props.collection_visibility = json.dumps(visibility_data)
 
         wynn_props.weight_mode_on = True
         self.report({'INFO'}, f"Weight Mode ON: Soloing '{deform_collection.name}'")
@@ -87,6 +100,7 @@ class WYNN_OT_toggle_weight_mode(bpy.types.Operator):
                 for coll in armature.data.collections:
                     if 'deform' in coll.name.lower():
                         coll.is_visible = False
+                        coll.is_solo = False
                     else:
                         coll.is_visible = True
             wynn_props.weight_mode_on = False
@@ -94,19 +108,37 @@ class WYNN_OT_toggle_weight_mode(bpy.types.Operator):
             return
 
         import json
-        visibility_store = json.loads(wynn_props.collection_visibility)
+        try:
+            stored_data = json.loads(wynn_props.collection_visibility)
+        except:
+            stored_data = {}
+
+        # Support both new structure and potential legacy flat dict
+        if "collections" in stored_data:
+            collection_states = stored_data["collections"]
+            wireframe_states = stored_data.get("wireframes", {})
+        else:
+            collection_states = stored_data
+            wireframe_states = {}
 
         if hasattr(armature.data, "collections"):
             for coll in armature.data.collections:
                 # Restore visibility, default to True if collection is new
-                coll.is_visible = visibility_store.get(coll.name, True)
+                coll.is_visible = collection_states.get(coll.name, True)
                 
                 if 'deform' in coll.name.lower():
                     coll.is_visible = False
+                    coll.is_solo = False
+        
+        # Restore wireframes
+        for obj_name, was_wire in wireframe_states.items():
+            obj = bpy.data.objects.get(obj_name)
+            if obj and obj.type == 'MESH':
+                obj.show_wire = was_wire
 
         wynn_props.weight_mode_on = False
         wynn_props.collection_visibility = "" # Clear stored data
-        self.report({'INFO'}, "Weight Mode OFF: Restored bone collection visibility.")
+        self.report({'INFO'}, "Weight Mode OFF: Restored bone collection and wireframe visibility.")
 
 def register():
     bpy.utils.register_class(WYNN_OT_toggle_weight_mode)
