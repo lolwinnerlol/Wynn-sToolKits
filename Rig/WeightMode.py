@@ -40,7 +40,10 @@ class WYNN_OT_toggle_weight_mode(bpy.types.Operator):
             self.report({'ERROR'}, "No valid Armature found.")
             return {'CANCELLED'}
 
-        wynn_props = context.window_manager.wynn_rig_props
+        wynn_props = getattr(context.window_manager, "wynn_rig_props", None)
+        if not wynn_props:
+            self.report({'ERROR'}, "Rig properties not found. Please reload the addon.")
+            return {'CANCELLED'}
 
         if wynn_props.weight_mode_on:
             self.turn_off(context, armature, wynn_props)
@@ -69,6 +72,11 @@ class WYNN_OT_toggle_weight_mode(bpy.types.Operator):
             "collections": {},
             "wireframes": {}
         }
+
+        # Store overlay opacity if in View3D
+        if context.space_data and context.space_data.type == 'VIEW_3D':
+            visibility_data["overlay_opacity"] = context.space_data.overlay.wireframe_opacity
+            context.space_data.overlay.wireframe_opacity = 0.06
 
         for coll in armature.data.collections:
             visibility_data["collections"][coll.name] = coll.is_visible
@@ -117,9 +125,11 @@ class WYNN_OT_toggle_weight_mode(bpy.types.Operator):
         if "collections" in stored_data:
             collection_states = stored_data["collections"]
             wireframe_states = stored_data.get("wireframes", {})
+            overlay_opacity = stored_data.get("overlay_opacity")
         else:
             collection_states = stored_data
             wireframe_states = {}
+            overlay_opacity = None
 
         if hasattr(armature.data, "collections"):
             for coll in armature.data.collections:
@@ -135,6 +145,10 @@ class WYNN_OT_toggle_weight_mode(bpy.types.Operator):
             obj = bpy.data.objects.get(obj_name)
             if obj and obj.type == 'MESH':
                 obj.show_wire = was_wire
+        
+        # Restore overlay opacity
+        if overlay_opacity is not None and context.space_data and context.space_data.type == 'VIEW_3D':
+            context.space_data.overlay.wireframe_opacity = overlay_opacity
 
         wynn_props.weight_mode_on = False
         wynn_props.collection_visibility = "" # Clear stored data

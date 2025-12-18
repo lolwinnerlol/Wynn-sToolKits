@@ -4,6 +4,7 @@ from . import pie
 from . import Smooth
 from . import WeightMode
 from . import PaintWeight
+from . import WynnWeightBrush
 
 # Define a list of all classes in this module to register
 classes_to_register = [
@@ -20,6 +21,7 @@ def register():
     
     WeightMode.register()
     PaintWeight.register()
+    WynnWeightBrush.register()
     
     # You can also register keymaps or other things here
     print("Registered Rigging submodule")
@@ -31,6 +33,7 @@ def unregister():
         
     WeightMode.unregister()
     PaintWeight.unregister()
+    WynnWeightBrush.unregister()
         
     # You can also unregister keymaps or other things here
     print("Unregistered Rigging submodule")

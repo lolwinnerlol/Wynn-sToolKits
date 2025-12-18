@@ -8,7 +8,7 @@ class VIEW3D_MT_pie_rig_helpers(bpy.types.Menu):
     def draw(self, context):
         layout = self.layout
         pie = layout.menu_pie()
-        wynn_props = context.window_manager.wynn_rig_props
+        wynn_props = getattr(context.window_manager, "wynn_rig_props", None)
         is_weight_paint = context.mode == 'PAINT_WEIGHT'
 
         # Left
@@ -21,7 +21,7 @@ class VIEW3D_MT_pie_rig_helpers(bpy.types.Menu):
         pie.operator("wynn.smooth_weights", text="Smooth Symmetrize", icon='SMOOTHCURVE')
         
         # Bottom
-        if wynn_props.weight_mode_on:
+        if wynn_props and wynn_props.weight_mode_on:
             pie.operator("wynn.toggle_weight_mode", text="Deform Bone: ON", icon='HIDE_ON', depress=True)
         else:
             pie.operator("wynn.toggle_weight_mode", text="Deform Bone: OFF", icon='HIDE_OFF', depress=False)
@@ -31,3 +31,6 @@ class VIEW3D_MT_pie_rig_helpers(bpy.types.Menu):
             pie.operator("wynn.setup_weight_paint", text="Exit Paint Mode", icon='OBJECT_DATAMODE', depress=True)
         else:
             pie.operator("wynn.setup_weight_paint", text="Setup Paint Mode", icon='BRUSH_DATA')
+            
+        # Top-Left
+        pie.operator("wynn.smear_perf_monitor", text="Smear Brush", icon='BRUSH_DATA')

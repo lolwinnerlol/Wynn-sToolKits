@@ -23,7 +23,8 @@ def update_overlay_visibility(self, context):
     # This function is called by the 'toggle_overlays' property update
     # We need to ensure we are in a context where this makes sense
     if context.space_data and context.space_data.type == 'VIEW_3D':
-        stored_props = context.window_manager.wynn_animator_props
+        stored_props = getattr(context.window_manager, "wynn_animator_props", None)
+        if not stored_props: return
         
         # Only execute the logic if the silhouette tool is currently active
         if stored_props.is_silhouette_active:
@@ -156,7 +157,8 @@ class WYNN_PT_model_tab(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        props = context.window_manager.wynn_animator_props
+        props = getattr(context.window_manager, "wynn_animator_props", None)
+        if not props: return
 
         # Main collapsible box
         main_box = layout.box()
@@ -181,7 +183,8 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
         layout = self.layout
         # Get addon preferences and custom properties
         prefs = context.preferences.addons[__name__].preferences
-        props = context.window_manager.wynn_animator_props
+        props = getattr(context.window_manager, "wynn_animator_props", None)
+        if not props: return
         scene = context.scene
 
         # Main collapsible box
