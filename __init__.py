@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Wynn's Toolkits",
     "author": "suthiphan khamnong",
-    "version": (1, 3),
+    "version": (1, 4),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > Wynn's Toolkits",
     "description": "Collection of tools for projects",
@@ -11,7 +11,7 @@ bl_info = {
 }
 
 import bpy
-from . import Animate, Model, Rig                                                 
+from . import Animate, Model, Rig, Extra
 
 
 # -------------------------------------------------------------------
@@ -21,7 +21,7 @@ from . import Animate, Model, Rig
 def update_overlay_visibility(self, context):
     """Dynamically updates overlay visibility when the checkbox is toggled"""
     # This function is called by the 'toggle_overlays' property update
-    # We need to ensure we are in a context where this makes sense
+    # We need to ensure we are in5 a context where this makes sense
     if context.space_data and context.space_data.type == 'VIEW_3D':
         stored_props = getattr(context.window_manager, "wynn_animator_props", None)
         if not stored_props: return
@@ -257,6 +257,24 @@ class WYNN_PT_extra_tab(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        
+        box = layout.box()
+        box.label(text="Camera Tools")
+        
+        if context.scene.camera:
+            box.label(text=f"Active: {context.scene.camera.name}", icon='CAMERA_DATA')
+            
+        box.operator("wynn.set_camera_background", text="Set Project Cam.", icon='TRIA_DOWN_BAR')
+        box.operator("wynn.add_project_camera", text="Add Project Cam.", icon='ADD')
+        
+        row = box.row(align=True)
+        row.operator("wynn.toggle_rule_of_thirds", text="CamGuide", icon='MESH_GRID')
+        row.operator("wynn.fly_camera", text="Pilot Cam", icon='VIEW_PAN')
+        
+        if context.active_object and context.active_object.type == 'CAMERA':
+            box.separator()
+            box.prop(context.active_object.data, "lens", text="Focal Length")
+        
         # Change the URL below to your actual documentation link
         layout.operator("wm.url_open", text="GitHub & Documentation", icon='HELP').url = "https://github.com/lolwinnerlol/Wynn-sToolKits"
 
@@ -288,6 +306,7 @@ def register():
     Animate.register()
     Model.register()
     Rig.register()
+    Extra.register()
 
     # Attach the property group to the WindowManager
     bpy.types.WindowManager.wynn_animator_props = bpy.props.PointerProperty(
@@ -307,12 +326,12 @@ def register():
         addon_keymaps.append((km, kmi))
     
     print(r"""
- _       __                 _          ______            ______                ___ _____
-| |     / /_  ______  ____ ( )_____   /_  __/___  ____  / / __ )____  _  __   <  /|__  /
-| | /| / / / / / __ \/ __ \|// ___/    / / / __ \/ __ \/ / __  / __ \| |/_/   / /  /_ < 
-| |/ |/ / /_/ / / / / / / / (__  )    / / / /_/ / /_/ / / /_/ / /_/ />  <    / / ___/ / 
-|__/|__/\__, /_/ /_/_/ /_/ /____/    /_/  \____/\____/_/_____/\____/_/|_|   /_(_)____/  
-       /____/                                                                                                                                                    
+ _       __                 _          ______            ______                _____ __
+| |     / /_  ______  ____ ( )_____   /_  __/___  ____  / / __ )____  _  __   <  / // /
+| | /| / / / / / __ \/ __ \|// ___/    / / / __ \/ __ \/ / __  / __ \| |/_/   / / // /_
+| |/ |/ / /_/ / / / / / / / (__  )    / / / /_/ / /_/ / / /_/ / /_/ />  <    / /__  __/
+|__/|__/\__, /_/ /_/_/ /_/ /____/    /_/  \____/\____/_/_____/\____/_/|_|   /_(_)/_/   
+       /____/                                                                                                                                                                                                                              
     """)
 
 
@@ -326,6 +345,7 @@ def unregister():
     Animate.unregister()
     Model.unregister()
     Rig.unregister()
+    Extra.unregister()
 
     # Delete the custom property from the WindowManager
     del bpy.types.WindowManager.wynn_animator_props

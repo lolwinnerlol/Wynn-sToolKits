@@ -31,6 +31,7 @@ class ANIM_OT_playblast(bpy.types.Operator):
     def execute(self, context):
         scene = context.scene
         note = scene.playblast_note
+        print(f"DEBUG: Starting playblast execution. Scene: {scene.name}")
 
         # Store original settings
         original_filepath = scene.render.filepath
@@ -44,6 +45,7 @@ class ANIM_OT_playblast(bpy.types.Operator):
         original_use_file_extension = scene.render.use_file_extension
         original_frame_start = scene.frame_start
         original_frame_end = scene.frame_end
+        original_camera = scene.camera
 
         # Store and Set Viewport settings
         original_shading_color = None
@@ -57,6 +59,7 @@ class ANIM_OT_playblast(bpy.types.Operator):
 
         # Set output path
         output_dir = r"X:\My Drive\50_Render_Output\00_Blender\Playblast"
+        print(f"DEBUG: Checking output dir: {output_dir}")
         if not os.path.exists(output_dir):
             try:
                 os.makedirs(output_dir)
@@ -70,6 +73,7 @@ class ANIM_OT_playblast(bpy.types.Operator):
             base_name_root = re.sub(r'SC\d+', scene.name, filename, flags=re.IGNORECASE)
         else:
             base_name_root = scene.name
+        print(f"DEBUG: Base filename root determined: {base_name_root}")
 
         # Always clean up existing cut info from name (e.g. _C01)
         parts = base_name_root.split('_')
@@ -87,9 +91,14 @@ class ANIM_OT_playblast(bpy.types.Operator):
         # Define render tasks
         render_tasks = []
         # Force use of markers
-        markers = [m for m in sorted(scene.timeline_markers, key=lambda m: m.frame) if original_frame_start <= m.frame <= original_frame_end]
+        all_markers = scene.timeline_markers
+        markers = [m for m in sorted(all_markers, key=lambda m: m.frame) if original_frame_start <= m.frame <= original_frame_end and m.camera]
+        print(f"DEBUG: Found {len(markers)} bound markers (ignored {len(all_markers) - len(markers)} unbound/out-of-range).")
 
         if markers:
+            # Track camera usage to handle duplicates
+            cam_usage = {}
+
             for i, marker in enumerate(markers):
                 start = marker.frame
                 if i < len(markers) - 1:
@@ -98,14 +107,26 @@ class ANIM_OT_playblast(bpy.types.Operator):
                     end = original_frame_end
                 
                 if end >= start:
+                    cam_name = marker.camera.name
+                    count = cam_usage.get(cam_name, 0) + 1
+                    cam_usage[cam_name] = count
+                    
+                    suffix = f"_{cam_name}"
+                    if count > 1:
+                        suffix += f"_{count:02d}"
+
+                    print(f"DEBUG: Marker bound to camera '{marker.camera.name}'. Suffix: '{suffix}' ({start}-{end})")
                     render_tasks.append({
                         "start": start,
                         "end": end,
-                        "suffix": f"_C{i+1:02d}"
+                        "suffix": suffix,
+                        "camera": marker.camera
                     })
         else:
             # Fallback if no markers found: Render whole range as C01
-            render_tasks.append({"start": original_frame_start, "end": original_frame_end, "suffix": "_C01"})
+            suffix = f"_{scene.camera.name}" if scene.camera else "_C01"
+            print(f"DEBUG: No markers. Fallback task: {suffix}")
+            render_tasks.append({"start": original_frame_start, "end": original_frame_end, "suffix": suffix, "camera": scene.camera})
 
         # Set format to MPEG-4 H.264
         try:
@@ -135,8 +156,12 @@ class ANIM_OT_playblast(bpy.types.Operator):
             scene.frame_start = task["start"]
             scene.frame_end = task["end"]
             
+            if task.get("camera"):
+                scene.camera = task["camera"]
+            
             # Filename logic
             filename = f"{base_name_root}{task['suffix']}_{process_str}_{version_str}"
+            print(f"DEBUG: Rendering: {filename}")
             
             # Check for conflicts and increment if necessary
             base_filename = filename
@@ -157,13 +182,13 @@ class ANIM_OT_playblast(bpy.types.Operator):
         # Restore original settings
         scene.frame_start = original_frame_start
         scene.frame_end = original_frame_end
+        scene.camera = original_camera
         scene.render.filepath = original_filepath
         scene.render.stamp_note_text = original_stamp_info
         scene.render.use_stamp = original_use_stamp
         scene.render.stamp_font_size = original_stamp_font_size
         scene.render.image_settings.media_type = 'VIDEO'
-        #Stupid Ass Gemini
-        
+
         if original_media_type:
             scene.render.image_settings.media_type = original_media_type
         scene.render.image_settings.file_format = original_file_format
