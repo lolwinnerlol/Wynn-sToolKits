@@ -9,8 +9,7 @@ import tempfile
 MASTER_PATH = r"X:\My Drive\80_Resources\Blender Addons"
 
 def get_addon_path():
-    # Go up one level to get the root "Wynn's Toolkits" folder
-    return os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    return os.path.dirname(os.path.realpath(__file__))
 
 def parse_version(file_path):
     """Extracts version tuple from bl_info in __init__.py"""
@@ -31,12 +30,11 @@ def parse_version(file_path):
 def get_latest_zip_info():
     """Finds the zip file with the highest version number in MASTER_PATH"""
     if not os.path.exists(MASTER_PATH):
-        print(f"Wynn Updater: Master path not found at {MASTER_PATH}")
         return None, (0,0,0)
     
     files = os.listdir(MASTER_PATH)
     # Regex to match Wynn-sToolKits-main1.1.zip or similar
-    pattern = re.compile(r"Wynn-sToolKits-main[-_\s]*v?(\d+(?:\.\d+)*)\.zip", re.IGNORECASE)
+    pattern = re.compile(r"Wynn-sToolKits-main[-_]?(\d+(?:\.\d+)*)\.zip", re.IGNORECASE)
     
     versions = []
     for f in files:
@@ -50,7 +48,6 @@ def get_latest_zip_info():
                 continue
             
     if not versions:
-        print(f"Wynn Updater: No valid zip files found in {MASTER_PATH}")
         return None, (0,0,0)
         
     # Sort by version tuple descending
@@ -59,7 +56,8 @@ def get_latest_zip_info():
 
 def check_updates_core():
     """Compares local version with master zip version"""
-    local_path = os.path.join(get_addon_path(), "__init__.py")
+    # Look in the parent directory (Wynn's Toolkits) for the main __init__.py containing bl_info
+    local_path = os.path.join(os.path.dirname(get_addon_path()), "__init__.py")
     
     local_ver = parse_version(local_path)
     master_ver_tuple, master_filename = get_latest_zip_info()
@@ -67,7 +65,6 @@ def check_updates_core():
     if master_filename is None:
         return False, local_ver, (0,0,0)
     
-    print(f"Wynn Updater: Local Version {local_ver} | Master Version {master_ver_tuple}")
     return master_ver_tuple > local_ver, local_ver, master_ver_tuple
 
 class WM_OT_check_for_updates(bpy.types.Operator):
@@ -124,8 +121,10 @@ class WM_OT_update_addon(bpy.types.Operator):
                 # Locate the correct source folder inside the extracted zip
                 source_path = None
                 for root, dirs, files in os.walk(temp_dir):
-                    # Find the root folder that contains the 'Animate' submodule
                     if "Animate" in dirs:
+                        source_path = os.path.join(root, "Animate")
+                        break
+                    if "silhouette.py" in files and "motion_path.py" in files:
                         source_path = root
                         break
                 

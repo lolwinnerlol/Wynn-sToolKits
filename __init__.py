@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Wynn's Toolkits",
     "author": "suthiphan khamnong",
-    "version": (1, 2),
+    "version": (1, 3),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > Wynn's Toolkits",
     "description": "Collection of tools for projects",
@@ -259,7 +259,6 @@ class WYNN_PT_extra_tab(bpy.types.Panel):
         layout = self.layout
         # Change the URL below to your actual documentation link
         layout.operator("wm.url_open", text="GitHub & Documentation", icon='HELP').url = "https://github.com/lolwinnerlol/Wynn-sToolKits"
-        layout.operator("wm.check_for_updates", text="Check for Updates", icon='FILE_REFRESH')
 
 
 # -------------------------------------------------------------------
@@ -308,12 +307,12 @@ def register():
         addon_keymaps.append((km, kmi))
     
     print(r"""
- _       __                 _          ______            ____   _ __          ___ ___ 
-| |     / /_  ______  ____ ( )_____   /_  __/___  ____  / / /__(_) /______   <  /|__ \
-| | /| / / / / / __ \/ __ \|// ___/    / / / __ \/ __ \/ / //_/ / __/ ___/   / / __/ /
-| |/ |/ / /_/ / / / / / / / (__  )    / / / /_/ / /_/ / / ,< / / /_(__  )   / / / __/ 
-|__/|__/\__, /_/ /_/_/ /_/ /____/    /_/  \____/\____/_/_/|_/_/\__/____/   /_(_)____/ 
-       /____/                                                                                                                                                 
+ _       __                 _          ______            ______                ___ _____
+| |     / /_  ______  ____ ( )_____   /_  __/___  ____  / / __ )____  _  __   <  /|__  /
+| | /| / / / / / __ \/ __ \|// ___/    / / / __ \/ __ \/ / __  / __ \| |/_/   / /  /_ < 
+| |/ |/ / /_/ / / / / / / / (__  )    / / / /_/ / /_/ / / /_/ / /_/ />  <    / / ___/ / 
+|__/|__/\__, /_/ /_/_/ /_/ /____/    /_/  \____/\____/_/_____/\____/_/|_|   /_(_)____/  
+       /____/                                                                                                                                                    
     """)
 
 
