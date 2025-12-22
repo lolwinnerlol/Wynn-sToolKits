@@ -11,6 +11,7 @@ classes_to_register = [
     binary_weight.WYNN_OT_parent_binary_weights,
     binary_weight.WYNN_OT_assign_binary_weights,
     pie.VIEW3D_MT_pie_rig_helpers,
+    pie.WYNN_MT_edit_weights,
     Smooth.WYNN_OT_smooth_weights,
 ]
 
