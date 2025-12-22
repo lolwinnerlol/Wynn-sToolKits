@@ -68,7 +68,8 @@ def draw_text_callback(self, context):
     blf.position(font_id, x, y - 25, 0)
     blf.color(font_id, 0.8, 0.8, 0.8, 1)
     sym_text = "ON" if self.use_symmetry else "OFF"
-    blf.draw(font_id, f"Mirror: {sym_text} | Undo: {len(self.undo_stack)}")
+    debug_text = "ON" if self.debug_mode else "OFF"
+    blf.draw(font_id, f"Mirror: {sym_text} | Undo: {len(self.undo_stack)} | Debug(D): {debug_text}")
 
     # 5. PERFORMANCE (NEW)
     blf.position(font_id, x, y - 50, 0)
@@ -150,6 +151,7 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
     radius_px: bpy.props.IntProperty(name="Radius (Px)", default=50, min=1, max=1000)
     strength: bpy.props.FloatProperty(name="Strength", default=0.5, min=0.01, max=1.0)
     use_symmetry: bpy.props.BoolProperty(name="X Mirror", default=True)
+    debug_mode: bpy.props.BoolProperty(name="Debug Mode", default=False)
 
     def invoke(self, context, event):
         obj = context.active_object
@@ -193,6 +195,13 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
         self.kd_visual.balance()
         eval_obj.to_mesh_clear()
 
+        # 3. ADJACENCY (Topology)
+        self.adjacency = {}
+        for edge in obj.data.edges:
+            v1, v2 = edge.vertices
+            self.adjacency.setdefault(v1, []).append(v2)
+            self.adjacency.setdefault(v2, []).append(v1)
+
         # State
         self.cursor_loc = None
         self.mirror_loc_visual = None
@@ -214,6 +223,7 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
         self.message_text = ""
         self.message_timer = 0
         self.last_compute_time = 0.0 # Performance Tracking
+        self.debug_mode = self.debug_mode # Initialize from property
 
         args = (self, context)
         self._handle_3d = bpy.types.SpaceView3D.draw_handler_add(draw_circles_callback, args, 'WINDOW', 'POST_VIEW')
@@ -327,6 +337,11 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
             self.use_symmetry = not self.use_symmetry
             self.update_header(context)
             return {'RUNNING_MODAL'}
+        
+        if event.type == 'D' and event.value == 'PRESS':
+            self.debug_mode = not self.debug_mode
+            self.show_message(f"Debug Mode: {'ON' if self.debug_mode else 'OFF'}")
+            return {'RUNNING_MODAL'}
 
         if event.type == 'F' and event.value == 'PRESS':
             if event.shift:
@@ -419,13 +434,15 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
             count = 0
             for (co, index, dist) in found:
                 v = obj.data.vertices[index]
+                val = 0.0
                 try:
                     for g in v.groups:
                         if g.group == group_idx:
-                            total += g.weight
-                            count += 1
+                            val = g.weight
                             break
                 except IndexError: pass
+                total += val
+                count += 1
             if count == 0: return 0.0 
             return total / count
 
@@ -453,19 +470,31 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
                 if self.use_symmetry and self.mirror_loc_visual:
                     smear_src_val_mirror = self.get_source_weight(obj, self.mirror_loc_visual, idx_mirror, method='NEAREST')
         
-        if self.is_blur:
-             blur_avg = self.get_source_weight(obj, self.cursor_loc, idx_active, method='AVERAGE')
-             if self.use_symmetry and self.mirror_loc_visual:
-                 blur_avg_mirror = self.get_source_weight(obj, self.mirror_loc_visual, idx_mirror, method='AVERAGE')
-
         did_update = False
         for (co, index, dist) in found:
             v = obj.data.vertices[index]
             norm_dist = dist / self.world_radius
             falloff = 1.0 - (norm_dist * norm_dist)
-            if falloff < 0: falloff = 0
-            final_factor = (self.strength * 0.2) * falloff
+            final_factor = self.strength * max(0.0, falloff)
             
+            # Topological Smooth (Laplacian)
+            if self.is_blur:
+                neighbors = self.adjacency.get(index, [])
+                if neighbors:
+                    total_w = 0.0
+                    for n_idx in neighbors:
+                        w = 0.0
+                        try:
+                            for g in obj.data.vertices[n_idx].groups:
+                                if g.group == idx_active:
+                                    w = g.weight
+                                    break
+                        except IndexError: pass
+                        total_w += w
+                    blur_avg = total_w / len(neighbors)
+                else:
+                    blur_avg = 0.0
+
             self.apply_logic(obj, v, idx_active, final_factor, 
                              smear_val=smear_src_val, blur_avg=blur_avg)
             did_update = True
@@ -474,6 +503,24 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
                 m_idx = self.vert_map.get(index)
                 if m_idx is not None and m_idx != index:
                     v_m = obj.data.vertices[m_idx]
+                    
+                    if self.is_blur:
+                        neighbors_m = self.adjacency.get(m_idx, [])
+                        if neighbors_m:
+                            total_w_m = 0.0
+                            for n_idx_m in neighbors_m:
+                                w_m = 0.0
+                                try:
+                                    for g in obj.data.vertices[n_idx_m].groups:
+                                        if g.group == idx_mirror:
+                                            w_m = g.weight
+                                            break
+                                except IndexError: pass
+                                total_w_m += w_m
+                            blur_avg_mirror = total_w_m / len(neighbors_m)
+                        else:
+                            blur_avg_mirror = 0.0
+
                     self.apply_logic(obj, v_m, idx_mirror, final_factor, 
                                      smear_val=smear_src_val_mirror, blur_avg=blur_avg_mirror)
 
@@ -518,11 +565,18 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
         new_w = current_w
         if self.is_harden:
             new_w = get_harden_target(current_w, factor)
+            if self.debug_mode:
+                target = 1.0 if current_w >= 0.5 else 0.0
+                print(f"[HARDEN] v_idx:{vertex.index}, cur:{current_w:.3f}, target:{target:.1f}, factor:{factor:.3f} -> new:{new_w:.3f}")
         elif self.is_blur:
             new_w = get_smooth_target(current_w, blur_avg, factor)
+            if self.debug_mode:
+                print(f"[BLUR] v_idx:{vertex.index}, cur:{current_w:.3f}, avg:{blur_avg:.3f}, factor:{factor:.3f} -> new:{new_w:.3f}")
         else:
             if smear_val >= 0:
                 new_w = current_w + (smear_val - current_w) * factor
+                if self.debug_mode:
+                    print(f"[SMEAR] v_idx:{vertex.index}, cur:{current_w:.3f}, src:{smear_val:.3f}, factor:{factor:.3f} -> new:{new_w:.3f}")
 
         if new_w != current_w:
             in_group = False
@@ -540,7 +594,7 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
 
     def update_header(self, context):
         sym_str = "ON" if self.use_symmetry else "OFF"
-        context.area.header_text_set(f"F: Size | Shift+F: Strength | X: Mirror ({sym_str}) | Undo: {len(self.undo_stack)} | Perf: {self.last_compute_time:.2f}ms")
+        context.area.header_text_set(f"F: Size | Shift+F: Strength | X: Mirror ({sym_str}) | D: Debug | Undo: {len(self.undo_stack)} | Perf: {self.last_compute_time:.2f}ms")
 
 def register():
     bpy.utils.register_class(WYNN_OT_smear_perf_monitor)
