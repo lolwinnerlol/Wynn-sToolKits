@@ -23,7 +23,10 @@
 *   **Deform Bones:** โหมดช่วย Weight Paint โดยจะ Solo เฉพาะ Bone Collection ที่มีคำว่า 'Deform'
 *   **Setup Weight Paint:** สลับโหมด Weight Paint/Object Mode พร้อมตั้งค่า Viewport พร้อมปรับ Brush Constant (Show Wire, In Front) อัตโนมัติ
 *   **Smooth Symmetrize:** Smooth กระดูกที่เลือกทั้งซ้ายเเละขวาในอนาคตจะปรับให้ปรับได้มากกว่านี้
-*   **Pie menu (`V`):** คีย์ลัดสำหรับเรียกใช้เครื่องมือ Rigging
+
+*   **WynnWeightBrush:** บรัช Weight Paint อัลกอลิธึมโหดจัดๆ คลิกซ้ายโหมด Smear , Ctrl จะ Harden (เพิ่มความคม), และ Shift คลิกซ้ายจะ Smooth โดยใช้ Algorithm สุดเจ๋ง yippee พร้อมแสดงผลความเร็วในการคำนวณแบบ Real-time สามารถปรับขนาด (`F`), ความแรง (`Shift+F`), และสมมาตร (`X`) ได้
+
+*   **Pie menu (`V`):** คีย์ลัดสำหรับเรียกใช้เครื่องมือ Rigging ทั้งหมด
 
 ### 🧊 เครื่องมือโมเดลลิ่ง
 อยู่ในแท็บ **Model** ในแถบด้านข้าง *Wynn's Toolkits*
@@ -33,6 +36,14 @@
     *   **Assign:** เพิ่มสีที่เลือกเข้าไปใน face,vertex,edge ที่เลือก
     *   **Select:** เลือก face,vertex,edge ที่ตรงกับสี
     *   **Remove Color Attribute:** ลบ Vertex color ทั้งหมด
+
+### 📷 เครื่องมือพิเศษ (Extra)
+อยู่ในแท็บ **Extra** ในแถบด้านข้าง *Wynn's Toolkits*
+
+*   **Set Project Camera:** ตั้งค่ากล้องที่เลือกให้เป็นกล้องหลักของซีน พร้อมใส่ไกด์อัตราส่วน 2.35:1
+*   **Add Project Camera:** เพิ่มกล้องใหม่พร้อมตั้งค่าเป็นกล้องโปรเจกต์
+*   **CamGuide:** เปิด/ปิดเส้นไกด์ Rule of Thirds บนกล้องที่เลือก
+*   **Pilot Cam:** เปิดโหมด Fly/Walk เพื่อบังคับมุมกล้องแบบอิสระ
 
 ## วิธีการติดตั้ง
 
@@ -51,4 +62,4 @@
 
 ---
 **ผู้พัฒนา:** suthiphan khamnong
-**เวอร์ชัน:** 1.2
+**เวอร์ชัน:** 1.4.1
