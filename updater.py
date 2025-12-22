@@ -146,7 +146,7 @@ class WM_OT_update_addon(bpy.types.Operator):
                     if os.path.isdir(src):
                         if os.path.exists(dst):
                             shutil.rmtree(dst)
-                        shutil.copytree(src, dst)
+                        shutil.copytree(src, dst, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
                     else:
                         shutil.copy2(src, dst)
             
