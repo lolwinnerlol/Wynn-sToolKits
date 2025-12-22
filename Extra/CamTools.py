@@ -1,9 +1,11 @@
 import bpy
 import os
+import re
 
 def apply_camera_background(report_func, cam_obj):
     cam_data = cam_obj.data
     cam_data.show_background_images = True
+    cam_data.passepartout_alpha = 0.9
     
     image_name = "235Crop.png"
     img = bpy.data.images.get(image_name)
@@ -38,12 +40,29 @@ class WYNN_OT_set_camera_background(bpy.types.Operator):
     bl_label = "Set Camera Background"
     bl_options = {'REGISTER', 'UNDO'}
 
+    cut_number: bpy.props.IntProperty(name="Cut Number", default=1, min=1)
+
     @classmethod
     def poll(cls, context):
         return context.selected_objects and any(obj.type == 'CAMERA' for obj in context.selected_objects)
 
+    def invoke(self, context, event):
+        cameras = [obj for obj in context.selected_objects if obj.type == 'CAMERA']
+        if len(cameras) == 1:
+            cam = cameras[0]
+            if not re.match(r"^C_\d+$", cam.name):
+                return context.window_manager.invoke_props_dialog(self)
+        return self.execute(context)
+
     def execute(self, context):
         cameras = [obj for obj in context.selected_objects if obj.type == 'CAMERA']
+        if len(cameras) == 1:
+            cam = cameras[0]
+            context.scene.camera = cam
+            if not re.match(r"^C_\d+$", cam.name):
+                cam.name = f"C_{self.cut_number}"
+            bpy.ops.view3d.view_camera()
+
         for cam in cameras:
             apply_camera_background(self.report, cam)
         self.report({'INFO'}, f"Applied background to {len(cameras)} camera(s).")
