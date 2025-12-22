@@ -1,11 +1,10 @@
 import bpy
-from bpy.props import StringProperty, EnumProperty, BoolProperty
+from bpy.props import StringProperty, EnumProperty
 
 from . import silhouette
 from . import motion_path
 from . import ui
 from . import playblast
-from . import updater
 
 # --- Addon Registration ---
 
@@ -20,8 +19,6 @@ classes = (
     motion_path.WM_OT_update_motion_path,
     ui.VIEW3D_MT_pie_animation_helpers,
     playblast.ANIM_OT_playblast,
-    updater.WM_OT_check_for_updates,
-    updater.WM_OT_update_addon,
 )
 
 def register():
@@ -55,16 +52,6 @@ def register():
         description="Version number",
         default="01"
     )
-    
-    # Updater Property
-    bpy.types.WindowManager.wynn_update_available = BoolProperty(default=False)
-
-    # Auto-check for updates on startup (delayed by 2 seconds)
-    def auto_check_update():
-        is_avail, _, _ = updater.check_updates_core()
-        for wm in bpy.data.window_managers:
-            wm.wynn_update_available = is_avail
-    bpy.app.timers.register(auto_check_update, first_interval=2.0)
 
     # --- Keymap Registration ---
     # This creates the Shift+V shortcut
@@ -89,7 +76,6 @@ def unregister():
     del bpy.types.Scene.playblast_process
     del bpy.types.Scene.playblast_process_custom
     del bpy.types.Scene.playblast_version
-    del bpy.types.WindowManager.wynn_update_available
 
     # Unregister all classes in reverse order to avoid dependency issues
     for cls in reversed(classes):

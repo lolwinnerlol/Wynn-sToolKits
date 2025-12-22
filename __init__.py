@@ -11,7 +11,8 @@ bl_info = {
 }
 
 import bpy
-from . import Animate, Model, Rig, Extra
+from bpy.props import BoolProperty
+from . import Animate, Model, Rig, Extra, updater
 
 
 # -------------------------------------------------------------------
@@ -294,6 +295,8 @@ classes_to_register = [
     WynnAnimatorAddonPreferences,
     WA_PG_viewport_storage,
     WYNN_PG_rig_props,
+    updater.WM_OT_check_for_updates,
+    updater.WM_OT_update_addon,
 ]
 
 addon_keymaps = []
@@ -315,6 +318,7 @@ def register():
     bpy.types.WindowManager.wynn_rig_props = bpy.props.PointerProperty(
         type=WYNN_PG_rig_props
     )
+    bpy.types.WindowManager.wynn_update_available = BoolProperty(default=False)
     
     # Register Keymaps
     wm = bpy.context.window_manager
@@ -324,6 +328,13 @@ def register():
         kmi = km.keymap_items.new('wm.call_menu_pie', 'V', 'PRESS')
         kmi.properties.name = Rig.pie.VIEW3D_MT_pie_rig_helpers.bl_idname
         addon_keymaps.append((km, kmi))
+
+    # Auto-check for updates on startup (delayed)
+    def auto_check_update():
+        is_avail, _, _ = updater.check_updates_core()
+        for wm_instance in bpy.data.window_managers:
+            wm_instance.wynn_update_available = is_avail
+    bpy.app.timers.register(auto_check_update, first_interval=2.0)
     
     print(r"""
  _       __                 _          ______            ______                _____ __   ___
@@ -350,6 +361,7 @@ def unregister():
     # Delete the custom property from the WindowManager
     del bpy.types.WindowManager.wynn_animator_props
     del bpy.types.WindowManager.wynn_rig_props
+    del bpy.types.WindowManager.wynn_update_available
 
     # Unregister in reverse order to avoid errors
     for cls in reversed(classes_to_register):
