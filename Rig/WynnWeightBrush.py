@@ -68,7 +68,8 @@ def draw_text_callback(self, context):
     blf.position(font_id, x, y - 25, 0)
     blf.color(font_id, 0.8, 0.8, 0.8, 1)
     sym_text = "ON" if self.use_symmetry else "OFF"
-    blf.draw(font_id, f"Mirror: {sym_text} | Undo: {len(self.undo_stack)}")
+    debug_text = "ON" if self.debug_mode else "OFF"
+    blf.draw(font_id, f"Mirror: {sym_text} | Undo: {len(self.undo_stack)} | Debug(D): {debug_text}")
 
     # 5. PERFORMANCE (NEW)
     blf.position(font_id, x, y - 50, 0)
@@ -141,6 +142,15 @@ def draw_circles_callback(self, context):
     gpu.state.line_width_set(1.0)
     gpu.state.blend_set('NONE')
 
+class WYNN_MT_brush_context_menu(bpy.types.Menu):
+    bl_label = "Brush Settings"
+    bl_idname = "WYNN_MT_brush_context_menu"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(context.scene, "wynn_brush_radius", text="Radius")
+        layout.prop(context.scene, "wynn_brush_strength", slider=True, text="Strength")
+
 class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
     """Hard Smear + Performance Monitor"""
     bl_idname = "wynn.smear_perf_monitor"
@@ -150,12 +160,14 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
     radius_px: bpy.props.IntProperty(name="Radius (Px)", default=50, min=1, max=1000)
     strength: bpy.props.FloatProperty(name="Strength", default=0.5, min=0.01, max=1.0)
     use_symmetry: bpy.props.BoolProperty(name="X Mirror", default=True)
+    debug_mode: bpy.props.BoolProperty(name="Debug Mode", default=False)
 
     def invoke(self, context, event):
         obj = context.active_object
         if not obj or obj.type != 'MESH':
             self.report({'ERROR'}, "Select a Mesh")
             return {'CANCELLED'}
+        self.mesh_object = obj
 
         # 1. MAP
         self.vert_map = {} 
@@ -174,24 +186,17 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
             else:
                 self.vert_map[i] = None 
 
-        # 2. CACHE
-        depsgraph = context.evaluated_depsgraph_get()
-        eval_obj = obj.evaluated_get(depsgraph)
-        temp_mesh = eval_obj.to_mesh()
-        if len(temp_mesh.vertices) != len(obj.data.vertices):
-            eval_obj.to_mesh_clear()
+        # 2. CACHE (Initial)
+        if not self.refresh_geometry(context, self.mesh_object):
             self.report({'ERROR'}, "Vertex mismatch")
             return {'CANCELLED'}
 
-        self.kd_visual = KDTree(len(temp_mesh.vertices))
-        self.cached_coords = []
-        world_mat = eval_obj.matrix_world
-        for i, v in enumerate(temp_mesh.vertices):
-            world_pos = world_mat @ v.co
-            self.kd_visual.insert(world_pos, i)
-            self.cached_coords.append(world_pos)
-        self.kd_visual.balance()
-        eval_obj.to_mesh_clear()
+        # 3. ADJACENCY (Topology)
+        self.adjacency = {}
+        for edge in obj.data.edges:
+            v1, v2 = edge.vertices
+            self.adjacency.setdefault(v1, []).append(v2)
+            self.adjacency.setdefault(v2, []).append(v1)
 
         # State
         self.cursor_loc = None
@@ -214,6 +219,11 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
         self.message_text = ""
         self.message_timer = 0
         self.last_compute_time = 0.0 # Performance Tracking
+        self.debug_mode = self.debug_mode # Initialize from property
+        
+        # Initialize from Scene props
+        self.radius_px = context.scene.wynn_brush_radius
+        self.strength = context.scene.wynn_brush_strength
 
         args = (self, context)
         self._handle_3d = bpy.types.SpaceView3D.draw_handler_add(draw_circles_callback, args, 'WINDOW', 'POST_VIEW')
@@ -222,6 +232,31 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
         self.update_header(context)
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
+
+    def refresh_geometry(self, context, obj):
+        depsgraph = context.evaluated_depsgraph_get()
+        eval_obj = obj.evaluated_get(depsgraph)
+        temp_mesh = eval_obj.to_mesh()
+        
+        if len(temp_mesh.vertices) != len(obj.data.vertices):
+            eval_obj.to_mesh_clear()
+            return False
+
+        # Optimization: Transform entire mesh to world space in C (much faster than Python loop)
+        temp_mesh.transform(eval_obj.matrix_world)
+
+        self.kd_visual = KDTree(len(temp_mesh.vertices))
+        self.cached_coords = [None] * len(temp_mesh.vertices)
+        kd_insert = self.kd_visual.insert
+        
+        for i, v in enumerate(temp_mesh.vertices):
+            co = v.co
+            kd_insert(co, i)
+            self.cached_coords[i] = co
+            
+        self.kd_visual.balance()
+        eval_obj.to_mesh_clear()
+        return True
 
     def calculate_world_radius(self, context, location_3d):
         if not location_3d or not context.region_data: return 0.001
@@ -296,10 +331,26 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
         self.mouse_x = event.mouse_region_x
         self.mouse_y = event.mouse_region_y
         self.update_cursor(context, event)
+        
+        # Sync with Scene Properties (for Menu)
+        if not self.is_navigating_radius:
+            self.radius_px = context.scene.wynn_brush_radius
+        else:
+            context.scene.wynn_brush_radius = self.radius_px
+            
+        if not self.is_navigating_strength:
+            self.strength = context.scene.wynn_brush_strength
+        else:
+            context.scene.wynn_brush_strength = self.strength
 
         # Undo
         if event.type == 'Z' and event.value == 'PRESS' and event.ctrl:
             self.perform_undo(context.active_object)
+            return {'RUNNING_MODAL'}
+
+        # Toggle Overlays (Shift + Alt + Z)
+        if event.type == 'Z' and event.value == 'PRESS' and event.shift and event.alt:
+            context.space_data.overlay.show_overlays = not context.space_data.overlay.show_overlays
             return {'RUNNING_MODAL'}
 
         # Navigation
@@ -327,6 +378,11 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
             self.use_symmetry = not self.use_symmetry
             self.update_header(context)
             return {'RUNNING_MODAL'}
+        
+        if event.type == 'D' and event.value == 'PRESS':
+            self.debug_mode = not self.debug_mode
+            self.show_message(f"Debug Mode: {'ON' if self.debug_mode else 'OFF'}")
+            return {'RUNNING_MODAL'}
 
         if event.type == 'F' and event.value == 'PRESS':
             if event.shift:
@@ -345,15 +401,27 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
         if event.type in {'MIDDLEMOUSE', 'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
              return {'PASS_THROUGH'}
 
+        # Allow Bone Transforms (G, R, S)
+        if event.type in {'G', 'R', 'S'} and event.value == 'PRESS':
+            return {'PASS_THROUGH'}
+
         if event.type == 'LEFTMOUSE':
             if event.value == 'PRESS':
-                self.save_undo_snapshot(context.active_object)
+                if event.ctrl and event.shift:
+                    return {'PASS_THROUGH'}
+
+                self.refresh_geometry(context, self.mesh_object)
+                self.save_undo_snapshot(self.mesh_object)
                 self.painting = True
                 self.prev_cursor_loc = self.cursor_loc
             elif event.value == 'RELEASE':
                 self.painting = False
         
-        if event.type in {'ESC', 'RIGHTMOUSE'}:
+        if event.type == 'RIGHTMOUSE' and event.value == 'PRESS':
+            bpy.ops.wm.call_menu(name="WYNN_MT_brush_context_menu")
+            return {'RUNNING_MODAL'}
+        
+        if event.type == 'ESC':
             bpy.types.SpaceView3D.draw_handler_remove(self._handle_3d, 'WINDOW')
             bpy.types.SpaceView3D.draw_handler_remove(self._handle_2d, 'WINDOW')
             context.area.header_text_set(None)
@@ -419,19 +487,75 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
             count = 0
             for (co, index, dist) in found:
                 v = obj.data.vertices[index]
+                val = 0.0
                 try:
                     for g in v.groups:
                         if g.group == group_idx:
-                            total += g.weight
-                            count += 1
+                            val = g.weight
                             break
                 except IndexError: pass
+                total += val
+                count += 1
             if count == 0: return 0.0 
             return total / count
 
+    def smooth_vertex_all_groups(self, vertices, vertex_groups, vertex, factor):
+        neighbors = self.adjacency.get(vertex.index, [])
+        if not neighbors: return
+
+        # 1. Accumulate weights (Single Pass Optimization)
+        group_sums = {}
+        
+        for n_idx in neighbors:
+            n_v = vertices[n_idx]
+            for g in n_v.groups:
+                group_sums[g.group] = group_sums.get(g.group, 0.0) + g.weight
+        
+        num_neighbors = len(neighbors)
+            
+        # 3. Blend
+        total_weight = 0.0
+        new_weights = {}
+        current_weights = {g.group: g.weight for g in vertex.groups}
+        all_groups = set(group_sums.keys()) | set(current_weights.keys())
+        
+        for g_idx in all_groups:
+            cur_w = current_weights.get(g_idx, 0.0)
+            avg = group_sums.get(g_idx, 0.0) / num_neighbors
+            new_w = cur_w + (avg - cur_w) * factor
+            
+            if new_w > 0.0001:
+                new_weights[g_idx] = new_w
+                total_weight += new_w
+            
+        # 4. Normalize and Apply
+        if total_weight > 0.0001:
+            ratio = 1.0 / total_weight
+            existing_indices = set(current_weights.keys())
+            
+            # Check if we are adding any NEW groups (which invalidates direct references)
+            has_new_groups = any(g_idx not in existing_indices for g_idx in new_weights)
+
+            if has_new_groups:
+                # Safe Path: Use API for everything to avoid crash from realloc
+                for g_idx, raw_w in new_weights.items():
+                    final_w = raw_w * ratio
+                    vertex_groups[g_idx].add([vertex.index], final_w, 'REPLACE')
+            else:
+                # Fast Path: Use cached references (safe because no reallocation)
+                group_map = {g.group: g for g in vertex.groups}
+                for g_idx, raw_w in new_weights.items():
+                    group_map[g_idx].weight = raw_w * ratio
+            
+            for g_idx in existing_indices:
+                if g_idx not in new_weights:
+                    vertex_groups[g_idx].remove([vertex.index])
+
     def paint_stroke(self, context):
         if not self.cursor_loc: return
-        obj = context.active_object
+        obj = self.mesh_object
+        vertices = obj.data.vertices
+        vertex_groups = obj.vertex_groups
         
         idx_active = obj.vertex_groups.active_index
         if idx_active == -1: return
@@ -444,8 +568,6 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
         
         smear_src_val = -1.0
         smear_src_val_mirror = -1.0
-        blur_avg = 0.0
-        blur_avg_mirror = 0.0
         
         if not self.is_blur and not self.is_harden:
             if self.prev_cursor_loc:
@@ -453,29 +575,33 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
                 if self.use_symmetry and self.mirror_loc_visual:
                     smear_src_val_mirror = self.get_source_weight(obj, self.mirror_loc_visual, idx_mirror, method='NEAREST')
         
-        if self.is_blur:
-             blur_avg = self.get_source_weight(obj, self.cursor_loc, idx_active, method='AVERAGE')
-             if self.use_symmetry and self.mirror_loc_visual:
-                 blur_avg_mirror = self.get_source_weight(obj, self.mirror_loc_visual, idx_mirror, method='AVERAGE')
-
         did_update = False
         for (co, index, dist) in found:
-            v = obj.data.vertices[index]
+            v = vertices[index]
             norm_dist = dist / self.world_radius
             falloff = 1.0 - (norm_dist * norm_dist)
-            if falloff < 0: falloff = 0
-            final_factor = (self.strength * 0.2) * falloff
+            base_factor = self.strength * max(0.0, falloff)
             
-            self.apply_logic(obj, v, idx_active, final_factor, 
-                             smear_val=smear_src_val, blur_avg=blur_avg)
-            did_update = True
-            
-            if self.use_symmetry:
-                m_idx = self.vert_map.get(index)
-                if m_idx is not None and m_idx != index:
-                    v_m = obj.data.vertices[m_idx]
-                    self.apply_logic(obj, v_m, idx_mirror, final_factor, 
-                                     smear_val=smear_src_val_mirror, blur_avg=blur_avg_mirror)
+            if self.is_blur:
+                final_factor = base_factor * 0.25
+                self.smooth_vertex_all_groups(vertices, vertex_groups, v, final_factor)
+                did_update = True
+                
+                if self.use_symmetry:
+                    m_idx = self.vert_map.get(index)
+                    if m_idx is not None and m_idx != index:
+                        v_m = vertices[m_idx]
+                        self.smooth_vertex_all_groups(vertices, vertex_groups, v_m, final_factor)
+            else:
+                final_factor = base_factor * 0.25 if self.is_harden else base_factor
+                self.apply_logic(obj, v, idx_active, final_factor, smear_val=smear_src_val)
+                did_update = True
+                
+                if self.use_symmetry:
+                    m_idx = self.vert_map.get(index)
+                    if m_idx is not None and m_idx != index:
+                        v_m = vertices[m_idx]
+                        self.apply_logic(obj, v_m, idx_mirror, final_factor, smear_val=smear_src_val_mirror)
 
         if did_update:
             obj.data.update()
@@ -496,9 +622,8 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
         sum_others = total - main_weight
         
         if sum_others <= 0.0001:
-            if main_weight > 1.0:
-                for g in vertex.groups:
-                    if g.group == main_group_index: g.weight = 1.0
+            for g in vertex.groups:
+                if g.group == main_group_index: g.weight = 1.0
             return
 
         ratio = remaining_allowance / sum_others
@@ -518,11 +643,18 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
         new_w = current_w
         if self.is_harden:
             new_w = get_harden_target(current_w, factor)
+            if self.debug_mode:
+                target = 1.0 if current_w >= 0.5 else 0.0
+                print(f"[HARDEN] v_idx:{vertex.index}, cur:{current_w:.3f}, target:{target:.1f}, factor:{factor:.3f} -> new:{new_w:.3f}")
         elif self.is_blur:
             new_w = get_smooth_target(current_w, blur_avg, factor)
+            if self.debug_mode:
+                print(f"[BLUR] v_idx:{vertex.index}, cur:{current_w:.3f}, avg:{blur_avg:.3f}, factor:{factor:.3f} -> new:{new_w:.3f}")
         else:
             if smear_val >= 0:
                 new_w = current_w + (smear_val - current_w) * factor
+                if self.debug_mode:
+                    print(f"[SMEAR] v_idx:{vertex.index}, cur:{current_w:.3f}, src:{smear_val:.3f}, factor:{factor:.3f} -> new:{new_w:.3f}")
 
         if new_w != current_w:
             in_group = False
@@ -540,11 +672,17 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
 
     def update_header(self, context):
         sym_str = "ON" if self.use_symmetry else "OFF"
-        context.area.header_text_set(f"F: Size | Shift+F: Strength | X: Mirror ({sym_str}) | Undo: {len(self.undo_stack)} | Perf: {self.last_compute_time:.2f}ms")
+        context.area.header_text_set(f"F: Size | Shift+F: Strength | X: Mirror ({sym_str}) | D: Debug | Undo: {len(self.undo_stack)} | Perf: {self.last_compute_time:.2f}ms")
 
 def register():
+    bpy.types.Scene.wynn_brush_radius = bpy.props.IntProperty(name="Radius (Px)", default=50, min=1, max=1000)
+    bpy.types.Scene.wynn_brush_strength = bpy.props.FloatProperty(name="Strength", default=0.5, min=0.01, max=1.0)
+    bpy.utils.register_class(WYNN_MT_brush_context_menu)
     bpy.utils.register_class(WYNN_OT_smear_perf_monitor)
 def unregister():
+    del bpy.types.Scene.wynn_brush_radius
+    del bpy.types.Scene.wynn_brush_strength
+    bpy.utils.unregister_class(WYNN_MT_brush_context_menu)
     bpy.utils.unregister_class(WYNN_OT_smear_perf_monitor)
 if __name__ == "__main__":
     register()
