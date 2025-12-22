@@ -12,7 +12,13 @@ bl_info = {
 
 import bpy
 from bpy.props import BoolProperty
-from . import Animate, Model, Rig, Extra, updater
+import sys
+from . import updater
+
+# Fix: Inject root updater into Animate package to prevent loading stray/empty local updater.py
+sys.modules[__name__ + ".Animate.updater"] = updater
+
+from . import Animate, Model, Rig, Extra
 
 
 # -------------------------------------------------------------------

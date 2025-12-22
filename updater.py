@@ -31,6 +31,7 @@ def parse_version(file_path):
 def get_latest_zip_info():
     """Finds the zip file with the highest version number in MASTER_PATH"""
     if not os.path.exists(MASTER_PATH):
+        print(f"Updater Error: Master path not found: {MASTER_PATH}")
         return None, (0,0,0)
     
     files = os.listdir(MASTER_PATH)
@@ -80,6 +81,8 @@ class WM_OT_check_for_updates(bpy.types.Operator):
         if is_available:
             self.report({'INFO'}, f"Update Available: {master} (Current: {local})")
             bpy.ops.wm.update_addon('INVOKE_DEFAULT')
+        elif master == (0, 0, 0):
+            self.report({'WARNING'}, f"No valid zip files found in: {MASTER_PATH}")
         else:
             self.report({'INFO'}, f"Addon is up to date: {local}")
             
@@ -128,7 +131,7 @@ class WM_OT_update_addon(bpy.types.Operator):
                         break
                 
                 if not source_path:
-                    self.report({'ERROR'}, "Could not find addon root in zip. Looking for __init__.py, Animate/, Rig/, etc.")
+                    self.report({'ERROR'}, "Invalid Zip: Must contain '__init__.py', 'Animate' folder, and 'Rig' folder.")
                     return {'CANCELLED'}
 
                 # Copy all contents from the found source path to the local addon directory
