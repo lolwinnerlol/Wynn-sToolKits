@@ -81,6 +81,12 @@ class WynnAnimatorAddonPreferences(bpy.types.AddonPreferences):
         min=0.0, max=1.0
     )
 
+    edit_mode_use_falloff: bpy.props.BoolProperty(
+        name="Edit Mode Falloff",
+        description="If enabled, 'Use Falloff' will be ON by default when using Edit Mode Weight tools",
+        default=False
+    )
+
     def draw(self, context):
         layout = self.layout
         
@@ -94,8 +100,9 @@ class WynnAnimatorAddonPreferences(bpy.types.AddonPreferences):
 
         # Tool Defaults
         box = layout.box()
-        box.label(text="Tool Defaults (Silhouette)", icon='SHADING_RENDERED')
+        box.label(text="Tool Defaults", icon='SHADING_RENDERED')
         box.prop(self, "toggle_overlays")
+        box.prop(self, "edit_mode_use_falloff")
         
         row = box.row()
         row.prop(self, "silhouette_color")
@@ -384,12 +391,12 @@ def register():
     bpy.app.timers.register(auto_check_update, first_interval=2.0)
     
     print(r"""
- _       __                 _          ______            ______                _____ __   ___
-| |     / /_  ______  ____ ( )_____   /_  __/___  ____  / / __ )____  _  __   <  / // /  <  /
-| | /| / / / / / __ \/ __ \|// ___/    / / / __ \/ __ \/ / __  / __ \| |/_/   / / // /_  / / 
-| |/ |/ / /_/ / / / / / / / (__  )    / / / /_/ / /_/ / / /_/ / /_/ />  <    / /__  __/ / /  
-|__/|__/\__, /_/ /_/_/ /_/ /____/    /_/  \____/\____/_/_____/\____/_/|_|   /_(_)/_/ (_)_/   
-       /____/                                                                                                                                                                                                                                                                                                             
+ _       __                 _          ______            ______                _____ __   ___ 
+| |     / /_  ______  ____ ( )_____   /_  __/___  ____  / / __ )____  _  __   <  / // /  |__ \
+| | /| / / / / / __ \/ __ \|// ___/    / / / __ \/ __ \/ / __  / __ \| |/_/   / / // /_  __/ /
+| |/ |/ / /_/ / / / / / / / (__  )    / / / /_/ / /_/ / / /_/ / /_/ />  <    / /__  __/ / __/ 
+|__/|__/\__, /_/ /_/_/ /_/ /____/    /_/  \____/\____/_/_____/\____/_/|_|   /_(_)/_/ (_)____/ 
+       /____/                                                                                                                                                                                                                                                                                                                                                                                             
     """)
 
 

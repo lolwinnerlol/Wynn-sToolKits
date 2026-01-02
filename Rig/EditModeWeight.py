@@ -12,6 +12,19 @@ class WynnEditWeightBase(bpy.types.Operator):
     """Base class for Edit Mode Weight Operations"""
     bl_options = {'REGISTER', 'UNDO'}
 
+    def check_falloff_pref(self, context):
+        # Only override if NOT set by user (or passing in args)
+        if self.properties.is_property_set("use_falloff"):
+            return
+
+        try:
+            addon_name = __package__.split('.')[0]
+            prefs = context.preferences.addons.get(addon_name)
+            if prefs and prefs.preferences.edit_mode_use_falloff:
+                self.use_falloff = True
+        except Exception as e:
+            print(f"WynnEditWeight Pref Error: {e}")
+
     def get_falloff_targets(self, bm, selected_verts, steps):
         """
         Returns dict {bm_vert: factor}
@@ -167,6 +180,7 @@ class WYNN_OT_harden_weights(WynnEditWeightBase):
         # Re-use Assign logic but change mode to HARDEN (1)
         # We need to minimally override because Assign has 'weight_value' which we don't need for Harden
         # but the structure is identical.
+        self.check_falloff_pref(context)
         
         obj = context.active_object
         if obj.mode != 'EDIT' or obj.type != 'MESH':
@@ -288,6 +302,7 @@ class WYNN_OT_smooth_weights(WynnEditWeightBase):
 
 
     def execute(self, context):
+        self.check_falloff_pref(context)
         obj = context.active_object
         bm = bmesh.from_edit_mesh(obj.data)
         dvert_layout = bm.verts.layers.deform.verify()
