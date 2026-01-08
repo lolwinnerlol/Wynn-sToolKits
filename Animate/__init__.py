@@ -15,7 +15,6 @@ addon_keymaps = []
 # List of all classes that need to be registered with Blender
 classes = (
     silhouette.WM_OT_silhouette_tool,
-    silhouette_window.WYNN_OT_OpenSilhouetteWindow,
     motion_path.WM_OT_calculate_motion_path,
     motion_path.WM_OT_clear_motion_path,
     motion_path.WM_OT_update_motion_path,
@@ -24,6 +23,9 @@ classes = (
 )
 
 def register():
+    # Register submodule first
+    silhouette_window.register()
+    
     # Register all the classes (Operators, Menus, etc.)
     for cls in classes:
         bpy.utils.register_class(cls)
@@ -79,6 +81,9 @@ def unregister():
     del bpy.types.Scene.playblast_process_custom
     del bpy.types.Scene.playblast_version
 
-    # Unregister all classes in reverse order to avoid dependency issues
+    # Unregister local classes
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
+        
+    # Unregister submodule
+    silhouette_window.unregister()

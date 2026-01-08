@@ -264,6 +264,10 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
             vp_box.operator("wm.silhouette_tool", text="Toggle Silhouette", icon='HIDE_ON')
             vp_box.operator("wynn.open_silhouette_window", text="Silhouette Window", icon='WINDOW')
             
+            # --- Camera Viewer Settings ---
+            from .Animate.silhouette_window import draw_camera_viewer_ui
+            draw_camera_viewer_ui(vp_box, context)
+            
             # Since these are hidden in prefs, we might want to expose them here?
             # Existing code exposed them here:
             vp_box.prop(prefs, "toggle_overlays")
