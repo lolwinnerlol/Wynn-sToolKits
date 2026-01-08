@@ -209,44 +209,64 @@ extern "C" {
             int count = 0;
             float cur_w = 0.0f;
             
+            // For Harden Mode (1), track the dominant influence
+            int best_idx = -1;
+            float best_w = -1.0f;
+
             for(int k=0; k<MAX_STORAGE; ++k) {
                 int g = weight_indices[v_base + k];
                 float w = weight_values[v_base + k];
                 if (g >= 0 && w > 0.0f) {
-                    weights[count++] = {g, w};
+                    weights[count] = {g, w};
+                    
                     if (g == active_group_index) {
                          cur_w = w;
                     }
+                    // Track max for Harden
+                    if (w > best_w) {
+                        best_w = w;
+                        best_idx = count; 
+                    }
+                    count++;
                 }
             }
             
             // 2. Compute New Weight
             float new_w = cur_w;
-            
+            int target_group = active_group_index; // Default to active
+
             if (mode == 0) { // Smear
                  // If smear_value is -1, usually we do nothing, but Python handles that check.
                  // checking here just in case.
                  if (smear_value >= 0.0f) {
                      new_w = cur_w + (smear_value - cur_w) * factor;
                  }
-            } else if (mode == 1) { // Harden (Contrast Stretch)
-                // Old: Snap to 0 or 1. Discontinuous.
-                // New: Push away from 0.5. Smooth.
-                // new = cur + (cur - 0.5) * factor
-                // If factor=1.0, this maps [0.25, 0.75] -> [0, 1].
-                new_w = cur_w + (cur_w - 0.5f) * factor;
-
-                // Clamp
-                if (new_w < 0.0f) new_w = 0.0f;
-                if (new_w > 1.0f) new_w = 1.0f;
+            } else if (mode == 1) { // Harden (Push Dominant to 1.0)
+                // Identify dominant
+                if (best_idx >= 0) {
+                    target_group = weights[best_idx].group_index;
+                    float dom_w = weights[best_idx].weight;
+                    
+                    // Logic: Push towards 1.0
+                    // new = dom + (1.0 - dom) * factor
+                    // or linear add?
+                    // User: "60% -> 70%". If factor is "strength", let's assume factor is approx 0.1-0.5 range.
+                    // Lerp approach is safer (no overshoot).
+                    new_w = dom_w + (1.0f - dom_w) * factor;
+                }
             }
             
-            if (std::abs(new_w - cur_w) < 0.0001f) continue;
+            if (active_group_index == target_group && std::abs(new_w - cur_w) < 0.0001f) continue;
+            // For harden, target_group might not be active_group_index.
+            // But we check change against the target's old weight.
+            if (mode == 1 && best_idx >= 0) {
+                 if (std::abs(new_w - weights[best_idx].weight) < 0.0001f) continue;
+            }
 
             // 3. Update Buffer
             bool found = false;
             for(int k=0; k<count; ++k) {
-                if (weights[k].group_index == active_group_index) {
+                if (weights[k].group_index == target_group) {
                     weights[k].weight = new_w;
                     found = true;
                     break;
@@ -254,13 +274,12 @@ extern "C" {
             }
             if (!found && new_w > 0.0001f) {
                 if (count < MAX_STORAGE) {
-                    weights[count++] = {active_group_index, new_w};
+                    weights[count++] = {target_group, new_w};
                 } else {
                      // Replace smallest if new_w is significant?
-                     // Simplest: Replace index 0 if not active? 
-                     // Or just ignore. (Matches simple Python add)
+                     // Simplest: Replace index 0?
                      // Implementation: Sort by weight ascending and replace first if smaller?
-                     // Let's blindly replace last one if full (or better: do proper sort limit)
+                     // For now, if full, we skip adding (rare case for >8 groups).
                 }
             }
             

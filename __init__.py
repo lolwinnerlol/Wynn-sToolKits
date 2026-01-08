@@ -28,7 +28,7 @@ from . import Animate, Model, Rig, Extra
 def update_overlay_visibility(self, context):
     """Dynamically updates overlay visibility when the checkbox is toggled"""
     # This function is called by the 'toggle_overlays' property update
-    # We need to ensure we are in5 a context where this makes sense
+    # We need to ensure we are in a context where this makes sense
     if context.space_data and context.space_data.type == 'VIEW_3D':
         stored_props = getattr(context.window_manager, "wynn_animator_props", None)
         if not stored_props: return
@@ -60,6 +60,7 @@ class WynnAnimatorAddonPreferences(bpy.types.AddonPreferences):
     """Defines the preferences for the Wynnimate addon"""
     bl_idname = __name__
 
+    # Existing properties kept for compatibility but hidden from UI
     toggle_overlays: bpy.props.BoolProperty(
         name="Toggle Overlays",
         description="Enable to automatically hide overlays when using the Silhouette Tool",
@@ -87,26 +88,43 @@ class WynnAnimatorAddonPreferences(bpy.types.AddonPreferences):
         default=False
     )
 
+    # New Role Visibility Properties
+    enable_model: bpy.props.BoolProperty(
+        name="Model",
+        description="Enable Modeling Tools",
+        default=True
+    )
+    enable_animation: bpy.props.BoolProperty(
+        name="Animation",
+        description="Enable Animation Tools",
+        default=True
+    )
+    enable_rig: bpy.props.BoolProperty(
+        name="Rig",
+        description="Enable Rigging Tools",
+        default=False
+    )
+    enable_extra: bpy.props.BoolProperty(
+        name="Extra",
+        description="Enable Extra Tools",
+        default=True
+    )
+
     def draw(self, context):
         layout = self.layout
         
-        # General / Updates
+        # Only display Role Visibility options
         box = layout.box()
-        box.label(text="General Settings", icon='PREFERENCES')
-        
-        row = box.row()
-        row.operator("wynn.check_for_updates", text="Check for Updates", icon='FILE_REFRESH')
-        row.operator("wynn.update_addon", text="Update Addon", icon='IMPORT')
+        box.label(text="Role Visibility", icon='HIDE_OFF')
+        col = box.column()
+        col.prop(self, "enable_model")
+        col.prop(self, "enable_animation")
+        col.prop(self, "enable_rig")
+        col.prop(self, "enable_extra")
+       
+        # Update buttons hidden but functionality remains if needed 
+        # (Removed per "only option of the role visibility" request)
 
-        # Tool Defaults
-        box = layout.box()
-        box.label(text="Tool Defaults", icon='SHADING_RENDERED')
-        box.prop(self, "toggle_overlays")
-        box.prop(self, "edit_mode_use_falloff")
-        
-        row = box.row()
-        row.prop(self, "silhouette_color")
-        row.prop(self, "background_color")
 
 class WA_PG_viewport_storage(bpy.types.PropertyGroup):
     """Stores the user's viewport settings before they are changed."""
@@ -182,6 +200,11 @@ class WYNN_PT_model_tab(bpy.types.Panel):
     bl_category = "Wynn's Toolkits"
     bl_parent_id = "WYNN_PT_main_panel"
 
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences.addons[__name__].preferences
+        return prefs.enable_model
+
     def draw(self, context):
         layout = self.layout
         props = getattr(context.window_manager, "wynn_animator_props", None)
@@ -195,7 +218,15 @@ class WYNN_PT_model_tab(bpy.types.Panel):
                  text="Vertex Color ID", emboss=False)
 
         if props.model_tools_expanded:
-            bpy.types.OBJECT_PT_vertex_color_id.draw(self, context)
+            # We can't access draw() of another panel class directly like this usually in strict API, 
+            # but it often works in Python. Better to use layout.popover or struct if registered.
+             # However, since VertexColorIDPanel is registered, it might show on its own if we don't handle it.
+             # It acts as a sub-panel? No, VertexColorIDPanel in vertex_color_id.py uses BL_REGION_TYPE='UI'.
+             # It will show up in the sidebar. We might want to suppress it if Model is disabled or integrate it here.
+             # The existing code calls .draw directly: bpy.types.OBJECT_PT_vertex_color_id.draw(self, context)
+             # This injects its UI into this panel.
+            if hasattr(bpy.types, "OBJECT_PT_vertex_color_id"):
+                bpy.types.OBJECT_PT_vertex_color_id.draw(self, context)
 
 class WYNN_PT_animation_tab(bpy.types.Panel):
     """Animation Tools Tab"""
@@ -205,6 +236,11 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
     bl_region_type = 'UI'
     bl_category = "Wynn's Toolkits"
     bl_parent_id = "WYNN_PT_main_panel"
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences.addons[__name__].preferences
+        return prefs.enable_animation
 
     def draw(self, context):
         layout = self.layout
@@ -226,6 +262,10 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
             vp_box = main_box.box()
             vp_box.label(text="Viewport")
             vp_box.operator("wm.silhouette_tool", text="Toggle Silhouette", icon='HIDE_ON')
+            vp_box.operator("wynn.open_silhouette_window", text="Silhouette Window", icon='WINDOW')
+            
+            # Since these are hidden in prefs, we might want to expose them here?
+            # Existing code exposed them here:
             vp_box.prop(prefs, "toggle_overlays")
             
             # Color Settings
@@ -266,6 +306,11 @@ class WYNN_PT_rig_tab(bpy.types.Panel):
     bl_region_type = 'UI'
     bl_category = "Wynn's Toolkits"
     bl_parent_id = "WYNN_PT_main_panel"
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences.addons[__name__].preferences
+        return prefs.enable_rig
 
     def draw(self, context):
         layout = self.layout
@@ -309,6 +354,11 @@ class WYNN_PT_extra_tab(bpy.types.Panel):
     bl_region_type = 'UI'
     bl_category = "Wynn's Toolkits"
     bl_parent_id = "WYNN_PT_main_panel"
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences.addons[__name__].preferences
+        return prefs.enable_extra
 
     def draw(self, context):
         layout = self.layout

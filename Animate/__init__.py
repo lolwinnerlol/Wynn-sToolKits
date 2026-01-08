@@ -2,6 +2,7 @@ import bpy
 from bpy.props import StringProperty, EnumProperty
 
 from . import silhouette
+from . import silhouette_window
 from . import motion_path
 from . import ui
 from . import playblast
@@ -14,6 +15,7 @@ addon_keymaps = []
 # List of all classes that need to be registered with Blender
 classes = (
     silhouette.WM_OT_silhouette_tool,
+    silhouette_window.WYNN_OT_OpenSilhouetteWindow,
     motion_path.WM_OT_calculate_motion_path,
     motion_path.WM_OT_clear_motion_path,
     motion_path.WM_OT_update_motion_path,
