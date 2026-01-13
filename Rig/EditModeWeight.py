@@ -446,6 +446,149 @@ class WYNN_OT_smooth_weights(WynnEditWeightBase):
         bmesh.update_edit_mesh(obj.data)
         return {'FINISHED'}
 
+class WYNN_OT_add_weight(WynnEditWeightBase):
+    """Add weight to selected vertices (Normalize Auto)"""
+    bl_idname = "wynn.edit_add_weight"
+    bl_label = "Add Weight (Edit)"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    strength: bpy.props.FloatProperty(name="Strength", default=0.1, min=-1.0, max=1.0)
+    
+    use_falloff: bpy.props.BoolProperty(name="Use Falloff", default=False)
+    falloff_factor: bpy.props.FloatProperty(name="Falloff Factor", default=1.0, min=0.0, max=2.0)
+    falloff_steps: bpy.props.IntProperty(name="Falloff Steps", default=2, min=1, max=10)
+    
+    auto_normalize: bpy.props.BoolProperty(name="Auto Normalize", description="Subtract from other groups to maintain 1.0", default=False)
+
+    def execute(self, context):
+        self.check_falloff_pref(context)
+        
+        obj = context.active_object
+        if obj.mode != 'EDIT' or obj.type != 'MESH':
+            return {'CANCELLED'}
+
+        bm = bmesh.from_edit_mesh(obj.data)
+        dvert_layout = bm.verts.layers.deform.verify()
+        
+        selected_verts = [v for v in bm.verts if v.select]
+        if not selected_verts: return {'FINISHED'}
+        
+        if not selected_verts: return {'FINISHED'}
+        
+        # Optimized Bone Detection (Priority: Active Bone -> Create Group if missing)
+        active_index = -1
+        
+        # 0. Try to find Armature and Active Bone
+        armature = None
+        for mod in obj.modifiers:
+            if mod.type == 'ARMATURE' and mod.object:
+                armature = mod.object
+                break
+        
+        if armature:
+            # Check Active Bone
+            target_bone_name = None
+            
+            # If in Pose Mode, check pose bones
+            if armature.mode == 'POSE':
+               pbone = armature.pose.bones.get(armature.data.bones.active.name) if armature.data.bones.active else None
+               if pbone and (pbone.bone.select or pbone.bone == armature.data.bones.active):
+                   target_bone_name = pbone.name
+            else:
+               # Fallback to data active (e.g. if in Object mode but was selected)
+               bone = armature.data.bones.active
+               if bone and getattr(bone, 'select', True): # If select usage fails, assume active is enough or default True
+                   target_bone_name = bone.name
+            
+            if target_bone_name:
+                g = obj.vertex_groups.get(target_bone_name)
+                if not g:
+                    g = obj.vertex_groups.new(name=target_bone_name)
+                    self.report({'INFO'}, f"Created Vertex Group: '{target_bone_name}'")
+                active_index = g.index
+
+        # Fallback to standard logic if no bone found
+        if active_index == -1:
+            active_index = self.get_active_group_index(obj, bm, selected_verts)
+            
+        if active_index == -1:
+            self.report({'WARNING'}, "No active vertex group found")
+            return {'CANCELLED'}
+
+        # 1. Get Targets with Falloff
+        if self.use_falloff:
+            falloff_map = self.get_falloff_targets(bm, selected_verts, self.falloff_steps)
+            target_verts = list(falloff_map.keys())
+        else:
+            target_verts = selected_verts
+            falloff_map = {v: 1.0 for v in selected_verts}
+
+        # 2. Add Weight & Normalize Loop
+        count_changed = 0
+        
+        for v in target_verts:
+            dvert = v[dvert_layout]
+            
+            # Helper to get current weight safely
+            current_w = dvert.get(active_index, 0.0)
+            
+            # Calculate Delta
+            # delta = strength * local_falloff * global_falloff_strength
+            local_falloff = falloff_map.get(v, 1.0)
+            if self.use_falloff:
+                delta = self.strength * local_falloff * self.falloff_factor
+            else:
+                delta = self.strength # No falloff, uniform strength
+            
+            # New Weight (Un-normalized)
+            raw_new_w = current_w + delta
+            
+            # Clamp 0..1 immediately? Normalization will handle ratios, 
+            # but negative weights are invalid for storage usually.
+            if raw_new_w < 0.0: raw_new_w = 0.0
+            
+            if self.auto_normalize:
+                # Mode A: Auto-Normalize (Aggressive)
+                # Ensure Total = 1.0. If active grows, others shrink.
+                
+                if raw_new_w >= 1.0:
+                    # Active takes all
+                    dvert.clear()
+                    dvert[active_index] = 1.0
+                else:
+                    dvert[active_index] = raw_new_w
+                    # Scale others to fit (1.0 - raw_new_w)
+                    current_others_sum = sum(w for g, w in dvert.items() if g != active_index)
+                    
+                    if current_others_sum > 0.0001:
+                        target_others_sum = 1.0 - raw_new_w
+                        scale = target_others_sum / current_others_sum
+                        for g in dvert.keys():
+                            if g != active_index:
+                                dvert[g] *= scale
+                    else:
+                        # If others are 0, we just have active weight (partial)
+                        pass
+            else:
+                 # Mode B: Additive (Conservative)
+                 # Only normalize if user overshoots 1.0 total
+                 dvert[active_index] = raw_new_w
+                 
+                 # Normalize (Clamp to 1.0)
+                 total_w = sum(dvert.values())
+                 if total_w > 1.0001:
+                     factor = 1.0 / total_w
+                     for g in dvert.keys():
+                         dvert[g] *= factor 
+            
+            count_changed += 1
+
+        bmesh.update_edit_mesh(obj.data)
+        
+        group_name = obj.vertex_groups[active_index].name
+        self.report({'INFO'}, f"Added Weight to {count_changed} verts (Bone: '{group_name}')")
+        return {'FINISHED'}
+
 class WYNN_OT_parent_binary_weights(bpy.types.Operator):
     """Placeholder for Parent Binary Weights"""
     bl_idname = "wynn.parent_binary_weights"
@@ -458,9 +601,11 @@ class WYNN_OT_parent_binary_weights(bpy.types.Operator):
 def register():
     bpy.utils.register_class(WYNN_OT_harden_weights)
     bpy.utils.register_class(WYNN_OT_smooth_weights)
+    bpy.utils.register_class(WYNN_OT_add_weight)
     bpy.utils.register_class(WYNN_OT_parent_binary_weights)
 
 def unregister():
     bpy.utils.unregister_class(WYNN_OT_harden_weights)
     bpy.utils.unregister_class(WYNN_OT_smooth_weights)
+    bpy.utils.unregister_class(WYNN_OT_add_weight)
     bpy.utils.unregister_class(WYNN_OT_parent_binary_weights)

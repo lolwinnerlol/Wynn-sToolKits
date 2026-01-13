@@ -150,6 +150,10 @@ class WA_PG_viewport_storage(bpy.types.PropertyGroup):
         name="Playblast", 
         default=True
     )
+    onion_skin_expanded: bpy.props.BoolProperty(
+        name="Onion Skin",
+        default=False
+    )
     show_overlays: bpy.props.BoolProperty(name="Show Overlays")
     light: bpy.props.StringProperty(name="Light")
     color_type: bpy.props.StringProperty(name="Color Type")
@@ -284,6 +288,17 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
             row.operator("wm.calculate_motion_path", text="Calculate", icon='ACTION_TWEAK')
             row.operator("wm.update_motion_path", text="Update", icon='FILE_REFRESH')
             mp_box.operator("wm.clear_motion_path", text="Clear All Paths", icon='X')
+        
+        # Onion Skin Section
+        os_box = layout.box()
+        row = os_box.row()
+        row.prop(props, "onion_skin_expanded", 
+                 icon="DOWNARROW_HLT" if props.onion_skin_expanded else "RIGHTARROW",
+                 text="Onion Skinning", emboss=False)
+        
+        if props.onion_skin_expanded:
+            from .Animate.onion_skin import draw_onion_skin_ui
+            draw_onion_skin_ui(os_box, context)
 
         # Playblast Section
         pb_box = layout.box()

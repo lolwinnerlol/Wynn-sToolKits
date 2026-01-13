@@ -17,6 +17,7 @@ class WYNN_MT_edit_weights(bpy.types.Menu):
             col.label(text="Edit Tools")
             col.operator("wynn.edit_harden_weights", text="Harden Weight", icon='DRIVER')
             col.operator("wynn.edit_smooth_weights", text="Smooth Weight", icon='SMOOTHCURVE')
+            col.operator("wynn.edit_add_weight", text="Add Weight", icon='ADD')
         else:
             layout.operator("wynn.parent_binary_weights", text="Parent Binary Weights", icon='GROUP_BONE')
 

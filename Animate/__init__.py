@@ -6,6 +6,7 @@ from . import silhouette_window
 from . import motion_path
 from . import ui
 from . import playblast
+from . import onion_skin
 
 # --- Addon Registration ---
 
@@ -24,7 +25,9 @@ classes = (
 
 def register():
     # Register submodule first
+    # Register submodule first
     silhouette_window.register()
+    onion_skin.register()
     
     # Register all the classes (Operators, Menus, etc.)
     for cls in classes:
@@ -86,4 +89,6 @@ def unregister():
         bpy.utils.unregister_class(cls)
         
     # Unregister submodule
+    # Unregister submodule
+    onion_skin.unregister()
     silhouette_window.unregister()
