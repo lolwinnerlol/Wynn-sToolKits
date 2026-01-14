@@ -7,6 +7,7 @@ from . import motion_path
 from . import ui
 from . import playblast
 from . import onion_skin
+from . import rig_ui
 
 # --- Addon Registration ---
 
@@ -21,6 +22,7 @@ classes = (
     motion_path.WM_OT_update_motion_path,
     ui.VIEW3D_MT_pie_animation_helpers,
     playblast.ANIM_OT_playblast,
+    rig_ui.WYNN_OT_enable_rig_ui,
 )
 
 def register():

@@ -242,6 +242,7 @@ class VertexColorIDPanel(bpy.types.Panel):
     bl_idname = "OBJECT_PT_vertex_color_id"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout

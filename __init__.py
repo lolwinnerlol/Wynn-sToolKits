@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Wynn's Toolkits",
     "author": "suthiphan khamnong",
-    "version": (1, 4, 1),
+    "version": (1, 5, 0),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > Wynn's Toolkits",
     "description": "Collection of tools for projects",
@@ -185,6 +185,7 @@ class WYNN_PT_main_panel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Wynn's Toolkits"
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout
@@ -202,6 +203,7 @@ class WYNN_PT_model_tab(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Wynn's Toolkits"
+    bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = "WYNN_PT_main_panel"
 
     @classmethod
@@ -239,6 +241,7 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Wynn's Toolkits"
+    bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = "WYNN_PT_main_panel"
 
     @classmethod
@@ -267,6 +270,12 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
             vp_box.label(text="Viewport")
             vp_box.operator("wm.silhouette_tool", text="Toggle Silhouette", icon='HIDE_ON')
             vp_box.operator("wynn.open_silhouette_window", text="Silhouette Window", icon='WINDOW')
+            
+            # Rig UI Section
+            rig_box = main_box.box()
+            rig_box.label(text="Rig UI")
+            rig_box.operator("wynn.enable_rig_ui", text="Enable Rig UI", icon='FILE_SCRIPT')
+
             
             # --- Camera Viewer Settings ---
             from .Animate.silhouette_window import draw_camera_viewer_ui
@@ -324,6 +333,7 @@ class WYNN_PT_rig_tab(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Wynn's Toolkits"
+    bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = "WYNN_PT_main_panel"
 
     @classmethod
@@ -372,6 +382,7 @@ class WYNN_PT_extra_tab(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Wynn's Toolkits"
+    bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = "WYNN_PT_main_panel"
 
     @classmethod
@@ -460,12 +471,12 @@ def register():
     bpy.app.timers.register(auto_check_update, first_interval=2.0)
     
     print(r"""
- _       __                 _          ______            ______                _____ __   ___ 
-| |     / /_  ______  ____ ( )_____   /_  __/___  ____  / / __ )____  _  __   <  / // /  |__ \
-| | /| / / / / / __ \/ __ \|// ___/    / / / __ \/ __ \/ / __  / __ \| |/_/   / / // /_  __/ /
-| |/ |/ / /_/ / / / / / / / (__  )    / / / /_/ / /_/ / / /_/ / /_/ />  <    / /__  __/ / __/ 
-|__/|__/\__, /_/ /_/_/ /_/ /____/    /_/  \____/\____/_/_____/\____/_/|_|   /_(_)/_/ (_)____/ 
-       /____/                                                                                                                                                                                                                                                                                                                                                                                             
+ _       __                 _          ______            ______                ___  ______   ____       __       
+| |     / /_  ______  ____ ( )_____   /_  __/___  ____  / / __ )____  _  __   <  / / ____/  / __ )___  / /_____ _
+| | /| / / / / / __ \/ __ \|// ___/    / / / __ \/ __ \/ / __  / __ \| |/_/   / / /___ \   / __  / _ \/ __/ __ `/
+| |/ |/ / /_/ / / / / / / / (__  )    / / / /_/ / /_/ / / /_/ / /_/ />  <    / / ____/ /  / /_/ /  __/ /_/ /_/ / 
+|__/|__/\__, /_/ /_/_/ /_/ /____/    /_/  \____/\____/_/_____/\____/_/|_|   /_(_)_____/  /_____/\___/\__/\__,_/  
+       /____/                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
     """)
 
 
