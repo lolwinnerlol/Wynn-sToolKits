@@ -271,12 +271,8 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
             vp_box.operator("wm.silhouette_tool", text="Toggle Silhouette", icon='HIDE_ON')
             vp_box.operator("wynn.open_silhouette_window", text="Silhouette Window", icon='WINDOW')
             
-<<<<<<< HEAD
             if hasattr(scene, "wynn_onion"):
                  vp_box.prop(scene.wynn_onion, "use_silhouette_group", text="Silhouette Uses Group")
-            
-=======
->>>>>>> 82624080c24bb706bc94ecc262d8c766e2ae5f88
             # Rig UI Section
             rig_box = main_box.box()
             rig_box.label(text="Rig UI")

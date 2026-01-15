@@ -46,7 +46,6 @@ class OnionSkinSettings(bpy.types.PropertyGroup):
         default=False,
         description="Only show ghosts on frames that have keyframes (Animation Data)"
     )
-<<<<<<< HEAD
 
     use_silhouette_group: BoolProperty(
         name="Silhouette Uses Group",
@@ -74,11 +73,6 @@ class OnionSkinSettings(bpy.types.PropertyGroup):
     active_group_index: IntProperty(
         update=update_active_group
     )
-=======
-    
-    groups: CollectionProperty(type=OnionSkinGroup)
-    active_group_index: IntProperty()
->>>>>>> 82624080c24bb706bc94ecc262d8c766e2ae5f88
 
 # -------------------------------------------------------------------
 #   Operators
@@ -217,10 +211,7 @@ class WYNN_OT_add_selected_to_onion_group(bpy.types.Operator):
             if obj not in current_objs:
                 item = group.objects.add()
                 item.obj = obj
-<<<<<<< HEAD
                 item.name = obj.name
-=======
->>>>>>> 82624080c24bb706bc94ecc262d8c766e2ae5f88
                 added_count += 1
                 
         if added_count > 0:
