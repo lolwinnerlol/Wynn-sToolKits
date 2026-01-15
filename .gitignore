@@ -1,0 +1,4 @@
+**/__pycache__/
+*.pyc
+*.pyo
+vertex_color_presets.json
