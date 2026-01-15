@@ -7,6 +7,7 @@ import bpy
 #   'shading': dict of shading properties
 #   'overlay': bool (show_overlays)
 #   'is_active': bool
+<<<<<<< HEAD
 # Value: dict containing:
 #   'shading': dict of shading properties
 #   'overlay': bool (show_overlays)
@@ -128,6 +129,10 @@ def capture_initial_state(context):
          restore_objs[obj.name] = obj.hide_viewport
     scene["wynn_silhouette_restore_objects"] = restore_objs
 
+=======
+viewport_state_store = {}
+
+>>>>>>> 82624080c24bb706bc94ecc262d8c766e2ae5f88
 class WM_OT_silhouette_tool(bpy.types.Operator):
     """Toggles a silhouette shading style for the 3D Viewport"""
     bl_idname = "wm.silhouette_tool"
@@ -241,11 +246,63 @@ class WM_OT_silhouette_tool(bpy.types.Operator):
                 already_globally_active = ("wynn_silhouette_restore" in scene or "wynn_silhouette_restore_objects" in scene)
 
                 if not already_globally_active:
+<<<<<<< HEAD
                     # Capture State (Global)
                     capture_initial_state(context)
                     
                     # Apply Visibility
                     update_silhouette_visibility(context)
+=======
+                    # Capture and Apply Object Visibility (Global)
+                    
+                    # Store collection visibility and Hide others
+                    restore_data = {}
+                    
+                    def process_visibility(lc):
+                        # Skip root for storage/hiding, but traverse children
+                        is_root = (lc == context.view_layer.layer_collection)
+                        
+                        if not is_root:
+                            restore_data[lc.name] = lc.hide_viewport
+                        
+                        is_target_collection = lc.collection.name.startswith("CharacterMesh")
+                        
+                        has_selected_obj = False
+                        for obj in lc.collection.objects:
+                            if obj.select_get():
+                                has_selected_obj = True
+                                break
+
+                        has_visible_descendant = False
+                        
+                        for child in lc.children:
+                            if process_visibility(child):
+                                has_visible_descendant = True
+                                
+                        should_be_visible = is_target_collection or has_visible_descendant or has_selected_obj
+                        
+                        if not is_root:
+                            lc.hide_viewport = not should_be_visible
+                            
+                        return should_be_visible
+                    
+                    process_visibility(context.view_layer.layer_collection)
+                    scene["wynn_silhouette_restore"] = restore_data
+
+                    # Store object visibility and Hide others
+                    restore_objs = {}
+                    for obj in scene.objects:
+                        is_in_char_mesh = False
+                        for col in obj.users_collection:
+                            if col.name.startswith("CharacterMesh"):
+                                is_in_char_mesh = True
+                                break
+                        
+                        if not is_in_char_mesh and not obj.select_get():
+                            restore_objs[obj.name] = obj.hide_viewport
+                            obj.hide_viewport = True
+                    scene["wynn_silhouette_restore_objects"] = restore_objs
+>>>>>>> 82624080c24bb706bc94ecc262d8c766e2ae5f88
                     
                     # Update global legacy flag
                     stored_props = getattr(context.window_manager, "wynn_animator_props", None)
