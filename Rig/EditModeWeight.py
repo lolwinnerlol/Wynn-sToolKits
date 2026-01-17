@@ -157,7 +157,13 @@ class WynnEditWeightBase(bpy.types.Operator):
             return None
         
         try:
-            dll = ctypes.CDLL(dll_path)
+            # Robust loading for Windows
+            if hasattr(os, 'add_dll_directory'):
+                 dll_dir = os.path.dirname(dll_path)
+                 with os.add_dll_directory(dll_dir):
+                     dll = ctypes.CDLL(dll_path)
+            else:
+                 dll = ctypes.CDLL(dll_path)
             return dll
         except Exception as e:
             self.report({'ERROR'}, f"Failed to load DLL: {e}")

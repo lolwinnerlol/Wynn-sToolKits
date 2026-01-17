@@ -2,13 +2,14 @@ import bpy
 from bpy.props import StringProperty, EnumProperty
 
 from . import silhouette
-from . import silhouette_window
+
 from . import motion_path
 from . import ui
 from . import playblast
 from . import onion_skin
 from . import groups
 from . import rig_ui
+from . import import_rig
 
 # --- Addon Registration ---
 
@@ -29,9 +30,10 @@ classes = (
 def register():
     # Register submodule first
     # Register submodule first
-    silhouette_window.register()
+
     groups.register()
     onion_skin.register()
+    import_rig.register()
     
     # Register all the classes (Operators, Menus, etc.)
     for cls in classes:
@@ -96,4 +98,5 @@ def unregister():
     # Unregister submodule
     onion_skin.unregister()
     groups.unregister()
-    silhouette_window.unregister()
+    import_rig.unregister()
+

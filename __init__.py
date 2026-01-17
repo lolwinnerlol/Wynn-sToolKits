@@ -22,6 +22,23 @@ from . import Animate, Model, Rig, Extra
 
 
 # -------------------------------------------------------------------
+#   Helper Functions
+# -------------------------------------------------------------------
+
+def get_addon_preferences(context):
+    """Safely retrieves addon preferences, handling folder name discrepancies."""
+    # Try the standard __name__ (folder name)
+    if __name__ in context.preferences.addons:
+        return context.preferences.addons[__name__].preferences
+    
+    # Try replacing hyphens with underscores (Blender sanitization)
+    name_sanitized = __name__.replace("-", "_")
+    if name_sanitized in context.preferences.addons:
+        return context.preferences.addons[name_sanitized].preferences
+        
+    return None
+
+# -------------------------------------------------------------------
 #   Update Functions
 # -------------------------------------------------------------------
 
@@ -154,7 +171,7 @@ class WA_PG_viewport_storage(bpy.types.PropertyGroup):
         name="Import Rig UI",
         default=True
     )
-    animation_tools_expanded: bpy.props.BoolProperty(
+    main_animation_tools_expanded: bpy.props.BoolProperty(
         name="Animation Tools", 
         default=True
     )
@@ -224,8 +241,8 @@ class WYNN_PT_model_tab(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        prefs = context.preferences.addons[__name__].preferences
-        return prefs.enable_model
+        prefs = get_addon_preferences(context)
+        return prefs and prefs.enable_model
 
     def draw(self, context):
         layout = self.layout
@@ -262,13 +279,13 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        prefs = context.preferences.addons[__name__].preferences
-        return prefs.enable_animation
+        prefs = get_addon_preferences(context)
+        return prefs and prefs.enable_animation
 
     def draw(self, context):
         layout = self.layout
         # Get addon preferences and custom properties
-        prefs = context.preferences.addons[__name__].preferences
+        prefs = get_addon_preferences(context)
         props = getattr(context.window_manager, "wynn_animator_props", None)
         if not props: return
         scene = context.scene
@@ -276,11 +293,11 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
         # Main collapsible box
         main_box = layout.box()
         row = main_box.row()
-        row.prop(props, "animation_tools_expanded", 
-                 icon="DOWNARROW_HLT" if props.animation_tools_expanded else "RIGHTARROW",
+        row.prop(props, "main_animation_tools_expanded", 
+                 icon="DOWNARROW_HLT" if props.main_animation_tools_expanded else "RIGHTARROW",
                  text="WynnAnimate (SHIFT+V)", emboss=False)
 
-        if props.animation_tools_expanded:
+        if props.main_animation_tools_expanded:
             # Viewport Tools Section (Collapsable)
             vp_box = main_box.box()
             row = vp_box.row()
@@ -290,11 +307,10 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
             
             if props.viewport_expanded:
                 vp_box.operator("wm.silhouette_tool", text="Toggle Silhouette", icon='HIDE_ON')
-                vp_box.operator("wynn.open_silhouette_window", text="Silhouette Window", icon='WINDOW')
+
                 
                 # --- Camera Viewer Settings ---
-                from .Animate.silhouette_window import draw_camera_viewer_ui
-                draw_camera_viewer_ui(vp_box, context)
+
                 
                 # Color Settings (Same Row)
                 col_row = vp_box.row(align=True)
@@ -338,6 +354,7 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
             
             if props.rig_ui_expanded:
                 rig_box.operator("wynn.enable_rig_ui", text="Enable Rig UI", icon='FILE_SCRIPT')
+                rig_box.operator("wynn.import_rig", text="Import Rig", icon='IMPORT')
         
             # Onion Skin Section
             os_box = main_box.box()
@@ -379,8 +396,8 @@ class WYNN_PT_rig_tab(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        prefs = context.preferences.addons[__name__].preferences
-        return prefs.enable_rig
+        prefs = get_addon_preferences(context)
+        return prefs and prefs.enable_rig
 
     def draw(self, context):
         layout = self.layout
@@ -428,8 +445,8 @@ class WYNN_PT_extra_tab(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        prefs = context.preferences.addons[__name__].preferences
-        return prefs.enable_extra
+        prefs = get_addon_preferences(context)
+        return prefs and prefs.enable_extra
 
     def draw(self, context):
         layout = self.layout

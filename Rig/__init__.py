@@ -6,6 +6,7 @@ from . import WeightMode
 from . import PaintWeight
 from . import WynnWeightBrush
 from . import EditModeWeight
+from . import ShapeKeyTransfer
 
 
 # Define a list of all classes in this module to register
@@ -26,6 +27,7 @@ def register():
     PaintWeight.register()
     WynnWeightBrush.register()
     EditModeWeight.register()
+    ShapeKeyTransfer.register()
 
     
     # You can also register keymaps or other things here
@@ -56,6 +58,7 @@ def unregister():
     PaintWeight.unregister()
     WynnWeightBrush.unregister()
     EditModeWeight.unregister()
+    ShapeKeyTransfer.unregister()
 
         
     print("Unregistered Rigging submodule")

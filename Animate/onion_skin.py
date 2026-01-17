@@ -19,7 +19,14 @@ from .groups import OnionSkinGroup
 
 class OnionSkinSettings(bpy.types.PropertyGroup):
     """Global Onion Skin Settings attached to Scene"""
-    is_enabled: BoolProperty(name="Enable Onion Skin", default=False)
+    def update_onion_skin_enabled(self, context):
+        """Show warning popup when enabled"""
+        if self.is_enabled:
+            def draw_popup(popup, context):
+                popup.layout.label(text="Onion Skin ตอนนี้ไม่เสถียรขอให้ใช้อย่างระมัดระวังน้าา")
+            context.window_manager.popup_menu(draw_popup, title="Warning", icon='ERROR')
+
+    is_enabled: BoolProperty(name="Enable Onion Skin", default=False, update=update_onion_skin_enabled)
     
     # We rename "Before" to "Ghosts Before" or just keep context clear
     frame_before: IntProperty(name="Before", default=1, min=0)

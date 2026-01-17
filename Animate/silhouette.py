@@ -7,97 +7,24 @@ import bpy
 #   'shading': dict of shading properties
 #   'overlay': bool (show_overlays)
 #   'is_active': bool
-# Value: dict containing:
-#   'shading': dict of shading properties
-#   'overlay': bool (show_overlays)
-#   'is_active': bool
 viewport_state_store = {}
 
-def update_silhouette_visibility(context):
-    """
-    Updates the visibility of objects based on current silhouette settings.
-    Call this when settings change (e.g. active group switches) while silhouette is active.
-    """
-    scene = context.scene
+def get_silhouette_target_objects(scene):
+    """Helper to determine which objects should be in silhouette based on settings"""
+    target_objects = set()
     
-    # Storage structure check (ensure we don't crash if called blindly)
-    if "wynn_silhouette_restore" not in scene and "wynn_silhouette_restore_objects" not in scene:
-         pass
-
-    # Helper for traversing layer collection
-    
-    # Check Onion Skin Settings for Group Override
+    # Logic: Check Onion Skin Group first, then standard CharacterMesh
     use_onion_group = False
-    onion_group_objects = set()
     if hasattr(scene, "wynn_onion") and scene.wynn_onion.use_silhouette_group:
         if scene.wynn_onion.groups and scene.wynn_onion.active_group_index < len(scene.wynn_onion.groups):
             group = scene.wynn_onion.groups[scene.wynn_onion.active_group_index]
             onion_group_objects = {item.obj for item in group.objects if item.obj}
             if onion_group_objects:
+                target_objects = onion_group_objects
                 use_onion_group = True
-
-    restore_data = {}
-    restore_objs = {} 
-
-    if use_onion_group:
-         # --- GROUP MODE ---
-         def process_visibility_group(lc):
-            is_root = (lc == context.view_layer.layer_collection)
-            
-            has_group_obj = False
-            for obj in lc.collection.objects:
-                if obj in onion_group_objects:
-                    has_group_obj = True
-                    break
-            
-            has_visible_descendant = False
-            for child in lc.children:
-                if process_visibility_group(child):
-                    has_visible_descendant = True
-                    
-            should_be_visible = has_group_obj or has_visible_descendant
-            if not is_root:
-                lc.hide_viewport = not should_be_visible
-            return should_be_visible
-
-         process_visibility_group(context.view_layer.layer_collection)
-         
-         # Apply Object Visibility
-         for obj in scene.objects:
-             if obj in onion_group_objects:
-                 obj.hide_viewport = False
-             else:
-                 obj.hide_viewport = True
-
-    else:
-        # --- STANDARD MODE (CharacterMesh / Selection) ---
-        def process_visibility(lc):
-            is_root = (lc == context.view_layer.layer_collection)
-            
-            is_target_collection = lc.collection.name.startswith("CharacterMesh")
-            
-            has_selected_obj = False
-            for obj in lc.collection.objects:
-                if obj.select_get():
-                    has_selected_obj = True
-                    break
-
-            has_visible_descendant = False
-            
-            for child in lc.children:
-                if process_visibility(child):
-                    has_visible_descendant = True
-                    
-            should_be_visible = is_target_collection or has_visible_descendant or has_selected_obj
-            
-            if not is_root:
-                    lc.hide_viewport = not should_be_visible
-                
-            return should_be_visible
     
-        process_visibility(context.view_layer.layer_collection)
-        
-        # Apply Object Visibility
+    if not use_onion_group:
+        # Fallback to standard CharacterMesh / Selection logic
         for obj in scene.objects:
             is_in_char_mesh = False
             for col in obj.users_collection:
@@ -105,30 +32,106 @@ def update_silhouette_visibility(context):
                     is_in_char_mesh = True
                     break
             
-            if not is_in_char_mesh and not obj.select_get():
-                obj.hide_viewport = True
+            if is_in_char_mesh or obj.select_get():
+                target_objects.add(obj)
+                
+    return target_objects
 
-def capture_initial_state(context):
-    """Captures the state BEFORE silhouette mode is applied."""
+def enter_local_view_safe(context, target_objects):
+    """
+    Safely enters Local View with specific objects, handling Mode switching.
+    Requires context to be overridden to the target 3D View.
+    """
+    if not target_objects: return
+
+    # 1. Save Mode and Selection
+    original_mode = context.mode
+    saved_selection = [obj for obj in context.selected_objects]
+    active_obj = context.active_object
+    
+    try:
+        # 2. Switch to Object Mode (Required for selection ops)
+        if original_mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+            
+        # 3. Select ONLY target objects
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in target_objects:
+            obj.select_set(True)
+        
+        # 4. Enter Local View (if not already)
+        if not context.space_data.local_view:
+            bpy.ops.view3d.localview(frame_selected=False)
+            
+        # 5. Restore Selection
+        # Note: In Local View, objects not in it are invisible/unselectable.
+        # We try to restore what we can.
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in saved_selection:
+            # Check if object is actually in the view layer (it should be)
+            if obj.name in context.view_layer.objects:
+                # In Local View, check if it's actually visible/selectable?
+                # select_set won't crash if hidden, just might not work.
+                obj.select_set(True)
+                
+        if active_obj and active_obj.name in context.view_layer.objects:
+             context.view_layer.objects.active = active_obj
+
+    except Exception as e:
+        print(f"Error entering local view: {e}")
+        
+    finally:
+        # 6. Restore Mode
+        if original_mode != 'OBJECT':
+             # Ensure active object allows switching back (e.g. valid armature for Pose)
+             # If active object changed or is invalid, this might fail, but we try.
+             try:
+                 if active_obj and context.view_layer.objects.active != active_obj:
+                      context.view_layer.objects.active = active_obj
+                 
+                 bpy.ops.object.mode_set(mode=original_mode)
+             except:
+                 pass # Fallback to Object Mode if restore fails
+
+def update_silhouette_visibility(context):
+    """
+    Updates the Local View of active Silhouette viewports.
+    Call this when settings change (e.g. active group switches).
+    """
+    global viewport_state_store
     scene = context.scene
     
-    # Store collection visibility
-    restore_data = {}
-    def traverse_store(lc):
-        if lc != context.view_layer.layer_collection:
-            restore_data[lc.name] = lc.hide_viewport
-        for child in lc.children:
-            traverse_store(child)
-    traverse_store(context.view_layer.layer_collection)
-    scene["wynn_silhouette_restore"] = restore_data
+    # 1. Identify Target Objects (New Group)
+    target_objects = get_silhouette_target_objects(scene)
     
-    # Store object visibility
-    restore_objs = {}
-    for obj in scene.objects:
-         restore_objs[obj.name] = obj.hide_viewport
-    scene["wynn_silhouette_restore_objects"] = restore_objs
+    # 2. Iterate ALL Viewports to find active ones
+    for window in context.window_manager.windows:
+        screen = window.screen
+        for area in screen.areas:
+            if area.type == 'VIEW_3D':
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        # Check if this space is in our store and Active
+                        if space in viewport_state_store and viewport_state_store[space].get('is_active'):
+                             # Found an active silhouette viewport!
+                             
+                             # Find Region (needed for override)
+                             region = next((r for r in area.regions if r.type == 'WINDOW'), None)
+                             if not region: continue
+                             
+                             # Override Context to target this Viewport
+                             with context.temp_override(window=window, screen=screen, area=area, region=region):
+                                 
+                                 # A. Exit Local View if in it (to reset)
+                                 if space.local_view: 
+                                      bpy.ops.view3d.localview() 
+                                 
+                                 # B. Re-Enter Safe
+                                 enter_local_view_safe(context, target_objects)
+
+
 class WM_OT_silhouette_tool(bpy.types.Operator):
-    """Toggles a silhouette shading style for the 3D Viewport"""
+    """Toggles a silhouette shading style for the 3D Viewport using Local View"""
     bl_idname = "wm.silhouette_tool"
     bl_label = "Silhouette Tool"
     bl_options = {'REGISTER', 'UNDO'}
@@ -149,13 +152,7 @@ class WM_OT_silhouette_tool(bpy.types.Operator):
         overlay = context.space_data.overlay
         scene = context.scene
         current_space = context.space_data
-
-        # Helper for traversing layer collection
-        def traverse_layer_objects(layer_coll, callback):
-            callback(layer_coll)
-            for child in layer_coll.children:
-                traverse_layer_objects(child, callback)
-
+        
         # Check if THIS viewport is already active
         is_active_here = False
         if current_space in viewport_state_store:
@@ -167,6 +164,10 @@ class WM_OT_silhouette_tool(bpy.types.Operator):
                 
                 saved_state = viewport_state_store[current_space]
                 
+                # Exit Local View if we are in it
+                if context.space_data.local_view:
+                     bpy.ops.view3d.localview()
+
                 # Restore Shading
                 if 'shading' in saved_state:
                     s_props = saved_state['shading']
@@ -184,29 +185,9 @@ class WM_OT_silhouette_tool(bpy.types.Operator):
                 # Remove this viewport from store
                 del viewport_state_store[current_space]
                 
-                # --- GLOBAL VISIBILITY MANAGEMENT ---
-                # Only restore global object visibility if NO OTHER viewport is active
+                # Update global legacy flag for UI consistency (if no other viewports active)
                 any_other_active = any(v.get('is_active', False) for k, v in viewport_state_store.items() if k != current_space)
-                
                 if not any_other_active:
-                    # Restore collection visibility
-                    if "wynn_silhouette_restore" in scene:
-                        def restore_callback(lc):
-                            if lc.name in scene["wynn_silhouette_restore"]:
-                                lc.hide_viewport = scene["wynn_silhouette_restore"][lc.name]
-                        
-                        traverse_layer_objects(context.view_layer.layer_collection, restore_callback)
-                        del scene["wynn_silhouette_restore"]
-
-                    # Restore object visibility
-                    if "wynn_silhouette_restore_objects" in scene:
-                        restore_objs = scene["wynn_silhouette_restore_objects"]
-                        for obj_name, state in restore_objs.items():
-                            if obj_name in scene.objects:
-                                scene.objects[obj_name].hide_viewport = state
-                        del scene["wynn_silhouette_restore_objects"]
-                    
-                    # Update global legacy flag for UI consistency (if referenced elsewhere)
                     stored_props = getattr(context.window_manager, "wynn_animator_props", None)
                     if stored_props:
                         stored_props.is_silhouette_active = False
@@ -234,24 +215,14 @@ class WM_OT_silhouette_tool(bpy.types.Operator):
                 
                 viewport_state_store[current_space] = state
 
-                # 2. Check Global Visibility State
-                # If "wynn_silhouette_restore" exists, assumes objects are ALREADY hidden/configured by another window.
-                # In that case, we SKIP the visibility processing to avoid overwriting the clean restore state with the already-hidden state.
-                already_globally_active = ("wynn_silhouette_restore" in scene or "wynn_silhouette_restore_objects" in scene)
+                # 2. Identify Objects for Silhouette
+                target_objects = get_silhouette_target_objects(scene)
 
-                if not already_globally_active:
-                    # Capture State (Global)
-                    capture_initial_state(context)
-                    
-                    # Apply Visibility
-                    update_silhouette_visibility(context)
-                    
-                    # Update global legacy flag
-                    stored_props = getattr(context.window_manager, "wynn_animator_props", None)
-                    if stored_props:
-                        stored_props.is_silhouette_active = True
+                # 3. Enter Local View with specific objects (SAFE MODE)
+                if target_objects:
+                    enter_local_view_safe(context, target_objects)
 
-                # 3. Apply Local Settings
+                # 4. Apply Shading Settings
                 shading.light = 'FLAT'
                 shading.color_type = 'SINGLE'
                 shading.single_color = prefs.silhouette_color
@@ -261,6 +232,11 @@ class WM_OT_silhouette_tool(bpy.types.Operator):
                 if prefs.toggle_overlays:
                     overlay.show_overlays = False
                 
+                # Update global legacy flag
+                stored_props = getattr(context.window_manager, "wynn_animator_props", None)
+                if stored_props:
+                    stored_props.is_silhouette_active = True
+                
                 self.report({'INFO'}, "Silhouette mode enabled.")
 
             return {'FINISHED'}
@@ -269,7 +245,7 @@ class WM_OT_silhouette_tool(bpy.types.Operator):
             if current_space in viewport_state_store:
                 del viewport_state_store[current_space]
             
-            # If no one else is active, try to clear scene flags to unstick
+            # Reset global flag if needed
             any_other_active = any(v.get('is_active', False) for k, v in viewport_state_store.items() if k != current_space)
             if not any_other_active:
                 stored_props = getattr(context.window_manager, "wynn_animator_props", None)

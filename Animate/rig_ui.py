@@ -22,8 +22,10 @@ class WYNN_OT_enable_rig_ui(bpy.types.Operator):
             self.report({'ERROR'}, "Selected object is not an Armature")
             return {'CANCELLED'}
 
-        # Construct the expected script path
-        script_name = f"{obj.name}.py"
+        # Construct the expected script path (ignoring .### suffix)
+        # e.g. "OhmGirl.001" -> "OhmGirl.py"
+        base_name = obj.name.split('.')[0]
+        script_name = f"{base_name}.py"
         script_path = os.path.join(self.SCRIPT_DIR, script_name)
 
         if not os.path.exists(script_path):

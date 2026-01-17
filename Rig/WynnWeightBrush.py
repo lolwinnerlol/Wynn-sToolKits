@@ -166,7 +166,17 @@ class WYNN_OT_smear_perf_monitor(bpy.types.Operator):
         dll_path = os.path.join(os.path.dirname(__file__), "WynnWeightLogic.dll")
         if os.path.exists(dll_path):
             try:
-                self.dll = ctypes.CDLL(dll_path)
+                # Robust loading for Windows
+                if hasattr(os, 'add_dll_directory'):
+                    dll_dir = os.path.dirname(dll_path)
+                    try:
+                        with os.add_dll_directory(dll_dir):
+                            self.dll = ctypes.CDLL(dll_path)
+                    except OSError:
+                         # Fallback if add_dll_directory fails or path is weird
+                         self.dll = ctypes.CDLL(dll_path)
+                else:
+                    self.dll = ctypes.CDLL(dll_path)
                 # smooth_strided(adj_s, adj_i, adj_w, w_i, w_v, targets, num, factor)
                 self.dll.smooth_strided.argtypes = [
                     ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_float),
