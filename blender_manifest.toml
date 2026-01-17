@@ -11,7 +11,7 @@ tags = ["Animation", "Rigging", "Modeling"]
 
 blender_version_min = "4.2.0"
 license = ["GPL-2.0-or-later"]
-copyright = "2024 suthiphan khamnong"
+copyright = ["2024 suthiphan khamnong"]
 
 [permissions]
 network = { optional = true }
