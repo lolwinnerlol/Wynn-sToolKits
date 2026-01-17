@@ -14,6 +14,6 @@ license = ["GPL-2.0-or-later"]
 copyright = ["2024 suthiphan khamnong"]
 
 [permissions]
-network = { optional = true }
-files = { optional = true }
-clipboard = { optional = true }
+network = "no"
+files = "Read Drive Files"
+clipboard = "Copy paste bones"
