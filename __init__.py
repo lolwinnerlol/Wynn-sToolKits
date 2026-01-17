@@ -1,15 +1,3 @@
-bl_info = {
-    "name": "Wynn's Toolkits",
-    "author": "suthiphan khamnong",
-    "version": (1, 5, 0),
-    "blender": (5, 0, 0),
-    "location": "View3D > Sidebar > Wynn's Toolkits",
-    "description": "Collection of tools for projects",
-    "warning": "",
-    "doc_url": "https://github.com/lolwinnerlol/Wynn-sToolKits",
-    "category": "Wynn's Toolkits",
-}
-
 import bpy
 import json
 import os
