@@ -2,3 +2,5 @@
 *.pyc
 *.pyo
 vertex_color_presets.json
+config.json
+.gitignore
