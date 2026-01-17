@@ -24,6 +24,8 @@ classes = (
     motion_path.WM_OT_update_motion_path,
     ui.VIEW3D_MT_pie_animation_helpers,
     playblast.ANIM_OT_playblast,
+    playblast.ANIM_OT_edit_playblast_note,
+    playblast.ANIM_OT_auto_version,
     rig_ui.WYNN_OT_enable_rig_ui,
 )
 
@@ -42,7 +44,7 @@ def register():
     bpy.types.Scene.playblast_note = StringProperty(
         name="Note",
         description="Note to be included in the playblast metadata",
-        default="Name here"
+        default="Note here"
     )
     bpy.types.Scene.playblast_process = EnumProperty(
         name="Process",
@@ -65,6 +67,12 @@ def register():
         description="Version number",
         default="01"
     )
+    bpy.types.Scene.playblast_output_path = StringProperty(
+        name="Output Path",
+        description="Directory to save playblasts",
+        default=r"X:\My Drive\50_Render_Output\00_Blender\Playblast\\",
+        subtype='DIR_PATH'
+    )
 
     # --- Keymap Registration ---
     # This creates the Shift+V shortcut
@@ -85,10 +93,9 @@ def unregister():
         km.keymap_items.remove(kmi)
     addon_keymaps.clear()
 
-    del bpy.types.Scene.playblast_note
-    del bpy.types.Scene.playblast_process
-    del bpy.types.Scene.playblast_process_custom
-    del bpy.types.Scene.playblast_version
+    for prop in ("playblast_note", "playblast_process", "playblast_process_custom", "playblast_version", "playblast_output_path"):
+        if hasattr(bpy.types.Scene, prop):
+            delattr(bpy.types.Scene, prop)
 
     # Unregister local classes
     for cls in reversed(classes):

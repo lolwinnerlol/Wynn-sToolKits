@@ -1,0 +1,11 @@
+schema_version = "1.0.0"
+id = "wynns_toolkits"
+version = "1.5.0"
+name = "Wynn's Toolkits"
+tagline = "Collection of tools for projects"
+maintainer = "suthiphan khamnong"
+type = "add-on"
+website = "https://github.com/lolwinnerlol/Wynn-sToolKits"
+tags = ["Animation", "Rigging", "Modeling"]
+blender_version_min = "5.0.0"
+platforms = ["windows-x64", "macos-arm64", "macos-x64", "linux-x64"]

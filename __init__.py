@@ -11,19 +11,41 @@ bl_info = {
 }
 
 import bpy
-from bpy.props import BoolProperty
-import sys
-from . import updater
-
-# Fix: Inject root updater into Animate package to prevent loading stray/empty local updater.py
-sys.modules[__name__ + ".Animate.updater"] = updater
-
+import json
+import os
+import subprocess
+from bpy.props import BoolProperty, StringProperty, EnumProperty
 from . import Animate, Model, Rig, Extra
-
 
 # -------------------------------------------------------------------
 #   Helper Functions
 # -------------------------------------------------------------------
+
+def get_config_path():
+    """Returns the absolute path to the config.json file."""
+    return os.path.join(os.path.dirname(__file__), "config.json")
+
+def load_config():
+    """Loads settings from config.json. Returns None if file doesn't exist."""
+    path = get_config_path()
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Wynn's Toolkits: Failed to load config: {e}")
+        return None
+
+def save_config(data):
+    """Saves settings to config.json."""
+    path = get_config_path()
+    try:
+        with open(path, 'w') as f:
+            json.dump(data, f, indent=4)
+        print(f"Wynn's Toolkits: Configuration saved to {path}")
+    except Exception as e:
+        print(f"Wynn's Toolkits: Failed to save config: {e}")
 
 def get_addon_preferences(context):
     """Safely retrieves addon preferences, handling folder name discrepancies."""
@@ -102,6 +124,18 @@ class WynnAnimatorAddonPreferences(bpy.types.AddonPreferences):
     edit_mode_use_falloff: bpy.props.BoolProperty(
         name="Edit Mode Falloff",
         description="If enabled, 'Use Falloff' will be ON by default when using Edit Mode Weight tools",
+        default=False
+    )
+    
+    # Setup Wizard Properties
+    user_name: bpy.props.StringProperty(
+        name="User Name",
+        description="Your name for personalized greetings/metadata",
+        default="GothGirl"
+    )
+    setup_complete: bpy.props.BoolProperty(
+        name="Setup Complete",
+        description="Has the user ran the first-time setup?",
         default=False
     )
 
@@ -207,6 +241,95 @@ class WYNN_PG_rig_props(bpy.types.PropertyGroup):
         name="Stored Bone Collection Visibility"
     )
 
+class WYNN_OT_setup_wizard(bpy.types.Operator):
+    """First Run Setup Wizard"""
+    bl_idname = "wynn.setup_wizard"
+    bl_label = "Welcome to Wynn's Toolkits"
+    bl_options = {'REGISTER', 'INTERNAL'}
+
+    user_name: bpy.props.StringProperty(name="Enter Your Name", default="Animator")
+    
+    # We will use the addon preferences directly for roles, but let's mirror them here 
+    # to show in the dialog or just show the prefs prop in draw.
+    # Actually, simpler to just access prefs in draw.
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=400)
+
+    def draw(self, context):
+        layout = self.layout
+        prefs = get_addon_preferences(context)
+        
+        layout.label(text="ยินดีต้อนรับบ! เรามาเริ่มต้นกันดีกว่า", icon='INFO')
+        layout.separator()
+        
+        layout.prop(self, "user_name")
+        layout.separator()
+        
+        layout.label(text="ต้องการเครื่องมืออะไรบ้าง?", icon='PREFERENCES')
+        box = layout.box()
+        box.prop(prefs, "enable_model", text="Modeling Tools")
+        box.prop(prefs, "enable_animation", text="Animation Tools")
+        box.prop(prefs, "enable_rig", text="Rigging Tools")
+        box.prop(prefs, "enable_extra", text="Extra Tools")
+
+    def execute(self, context):
+        prefs = get_addon_preferences(context)
+        prefs.user_name = self.user_name
+        prefs.setup_complete = True
+        
+        # Save to JSON
+        config_data = {
+            "user_name": self.user_name,
+            "setup_complete": True,
+            "roles": {
+                "enable_model": prefs.enable_model,
+                "enable_animation": prefs.enable_animation,
+                "enable_rig": prefs.enable_rig,
+                "enable_extra": prefs.enable_extra
+            }
+        }
+        save_config(config_data)
+        
+        # Save Blender preferences as well just in case
+        bpy.ops.wm.save_userpref()
+        
+        self.report({'INFO'}, f"Welcome, {self.user_name}! Setup Complete.")
+        return {'FINISHED'}
+
+        self.report({'INFO'}, f"Welcome, {self.user_name}! Setup Complete.")
+        return {'FINISHED'}
+
+
+class WYNN_OT_open_playblast_folder(bpy.types.Operator):
+    """Open the playblast output folder in Explorer"""
+    bl_idname = "wynn.open_playblast_folder"
+    bl_label = "Open Folder"
+    
+    def execute(self, context):
+        path = context.scene.playblast_output_path
+        # Default to //Playblast/ if empty, allow relative paths
+        if not path:
+            path = "//Playblast/"
+        
+        abs_path = bpy.path.abspath(path)
+        
+        if not os.path.exists(abs_path):
+            try:
+                os.makedirs(abs_path)
+            except Exception as e:
+                self.report({'ERROR'}, f"Could not create folder: {str(e)}")
+                return {'CANCELLED'}
+                
+        # Windows specific
+        try:
+            os.startfile(abs_path)
+        except Exception as e:
+            self.report({'ERROR'}, f"Could not open folder: {str(e)}")
+            return {'CANCELLED'}
+            
+        return {'FINISHED'}
+
 # -------------------------------------------------------------------
 #   Parent Panel
 # -------------------------------------------------------------------
@@ -222,6 +345,23 @@ class WYNN_PT_main_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        prefs = get_addon_preferences(context)
+        
+        if not prefs:
+            layout.label(text="Error loading preferences")
+            return
+
+        if not prefs.setup_complete:
+            layout.label(text="Welcome to Wynn's Toolkits!", icon='COMMUNITY')
+            layout.label(text="Please verify your settings.")
+            layout.separator()
+            layout.operator("wynn.setup_wizard", text="Start Setup", icon='PLAY')
+            return
+            
+        # Normal UI continues here if setup is complete
+        row = layout.row()
+        row.label(text=f"สวัสดีจ้า, {prefs.user_name}!", icon='USER')
+        row.operator("wynn.setup_wizard", text="", icon='PREFERENCES').user_name = prefs.user_name
 
 # -------------------------------------------------------------------
 #   Sub Panels (Tabs)
@@ -370,17 +510,21 @@ class WYNN_PT_animation_tab(bpy.types.Panel):
         # Playblast Section
         pb_box = layout.box()
         row = pb_box.row()
-        row.prop(props, "playblast_expanded", 
-                 icon="DOWNARROW_HLT" if props.playblast_expanded else "RIGHTARROW",
-                 text="Playblast", emboss=False)
-
         if props.playblast_expanded:
             col = pb_box.column()
+            
+            # Path Selection
+            row = col.row(align=True)
+            row.prop(scene, "playblast_output_path", text="")
+            row.operator("wynn.open_playblast_folder", text="", icon='EXTERNAL_DRIVE')
+            
+            col.separator()
+            
             col.prop(scene, "playblast_process", text="Process")
             if scene.playblast_process == 'OTHERS':
                 col.prop(scene, "playblast_process_custom", text="Custom")
             col.prop(scene, "playblast_version", text="Version")
-            col.prop(scene, "playblast_note", text="Animator ")
+            col.prop(scene, "playblast_note", text="Note")
             col.operator("anim.playblast", text="Render Playblast", icon='RENDER_ANIMATION')
 
 
@@ -485,10 +629,11 @@ classes_to_register = [
     WYNN_PT_rig_tab,
     WYNN_PT_extra_tab,
     WynnAnimatorAddonPreferences,
+    WYNN_OT_setup_wizard,
+    WYNN_OT_open_playblast_folder,
     WA_PG_viewport_storage,
     WYNN_PG_rig_props,
-    updater.WM_OT_check_for_updates,
-    updater.WM_OT_update_addon,
+
 ]
 
 addon_keymaps = []
@@ -510,7 +655,7 @@ def register():
     bpy.types.WindowManager.wynn_rig_props = bpy.props.PointerProperty(
         type=WYNN_PG_rig_props
     )
-    bpy.types.WindowManager.wynn_update_available = BoolProperty(default=False)
+
     
     # Register Keymaps
     wm = bpy.context.window_manager
@@ -521,12 +666,32 @@ def register():
         kmi.properties.name = Rig.pie.VIEW3D_MT_custom_pie_menu.bl_idname
         addon_keymaps.append((km, kmi))
 
-    # Auto-check for updates on startup (delayed)
-    def auto_check_update():
-        is_avail, _, _ = updater.check_updates_core()
-        for wm_instance in bpy.data.window_managers:
-            wm_instance.wynn_update_available = is_avail
-    bpy.app.timers.register(auto_check_update, first_interval=2.0)
+    # Load Config from JSON if it exists
+    config = load_config()
+    if config:
+        # We need to access preferences. Since we just registered, standard method should work
+        # but context might not be fully ready in some startup cases.
+        # However, accessing addon_preferences via bpy.context.preferences usually works here.
+        # Attempt to get prefs
+        pass
+        # Note: Accessing preferences during register can be tricky if the addon name isn't fully established.
+        # But we can try finding it.
+        addon_name = __name__
+        prefs = None
+        if addon_name in bpy.context.preferences.addons:
+            prefs = bpy.context.preferences.addons[addon_name].preferences
+        
+        if prefs:
+            prefs.user_name = config.get("user_name", "Animator")
+            prefs.setup_complete = config.get("setup_complete", False)
+            roles = config.get("roles", {})
+            prefs.enable_model = roles.get("enable_model", True)
+            prefs.enable_animation = roles.get("enable_animation", True)
+            prefs.enable_rig = roles.get("enable_rig", False)
+            prefs.enable_extra = roles.get("enable_extra", True)
+            print("Wynn's Toolkits: Config loaded.")
+
+
     
     print(r"""
  _       __                 _          ______            ______                ___  ______   ____       __       
@@ -553,7 +718,7 @@ def unregister():
     # Delete the custom property from the WindowManager
     del bpy.types.WindowManager.wynn_animator_props
     del bpy.types.WindowManager.wynn_rig_props
-    del bpy.types.WindowManager.wynn_update_available
+
 
     # Unregister in reverse order to avoid errors
     for cls in reversed(classes_to_register):

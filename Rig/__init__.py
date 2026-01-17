@@ -52,7 +52,10 @@ def unregister():
     addon_keymaps.clear()
 
     for cls in reversed(classes_to_register):
-        bpy.utils.unregister_class(cls)
+        try:
+            bpy.utils.unregister_class(cls)
+        except RuntimeError:
+            pass
         
     WeightMode.unregister()
     PaintWeight.unregister()

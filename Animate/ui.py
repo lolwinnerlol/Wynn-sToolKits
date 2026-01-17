@@ -1,7 +1,7 @@
 import bpy
 from . import silhouette
 from . import motion_path
-from . import updater
+
 
 # Define the Pie Menu
 class VIEW3D_MT_pie_animation_helpers(bpy.types.Menu):
@@ -22,6 +22,4 @@ class VIEW3D_MT_pie_animation_helpers(bpy.types.Menu):
         # Top Slot
         pie.operator(motion_path.WM_OT_update_motion_path.bl_idname, text="Update Path", icon='FILE_REFRESH')
         
-        # Top-Right Slot (Only visible if update is available)
-        if context.window_manager.wynn_update_available:
-            pie.operator(updater.WM_OT_update_addon.bl_idname, text="Update Available!", icon='URL')
+
