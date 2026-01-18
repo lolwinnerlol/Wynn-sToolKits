@@ -325,9 +325,19 @@ class WYNN_OT_check_updates(bpy.types.Operator):
     bl_description = "Force check for updates in the repositories"
     
     def execute(self, context):
+        print("\n[Wynn's Toolkits] Checking Updates...")
+        
+        # Debug: List all repos
+        if hasattr(bpy.context.preferences, "extensions"):
+            print(f"Found {len(bpy.context.preferences.extensions.repos)} repositories:")
+            for repo in bpy.context.preferences.extensions.repos:
+                print(f"  - Name: {repo.name}")
+                print(f"    URL:  {repo.remote_url}")
+                print(f"    Enabled: {repo.enabled}")
+        
         if hasattr(bpy.ops.extensions, "repo_sync_all"):
              bpy.ops.extensions.repo_sync_all()
-             self.report({'INFO'}, "Repositories Synced (Check Status Bar for Updates).")
+             self.report({'INFO'}, "Repositories Synced. Check System Console for details.")
         else:
              self.report({'WARNING'}, "Extension system not available.")
         return {'FINISHED'}
@@ -750,8 +760,10 @@ def register_repo():
         repos = bpy.context.preferences.extensions.repos
         for repo in repos:
             if repo.remote_url == repo_url:
+                print(f"Wynn's Toolkits: Repo URL already registered: {repo.name}")
                 return # Already exists
             if repo.name == repo_name:
+                print(f"Wynn's Toolkits: Repo Name already exists: {repo_name} (URL: {repo.remote_url})")
                 # Name collision, maybe update URL? for now just skip
                 return
 
@@ -765,6 +777,7 @@ def register_repo():
         def _add_repo_deferred():
             if repo_name not in bpy.context.preferences.extensions.repos:
                 try:
+                    print(f"Wynn's Toolkits: Attempting to register repo '{repo_name}' to '{repo_url}'...")
                     # Try using the direct collection API first (safer than operators)
                     repos = bpy.context.preferences.extensions.repos
                     
