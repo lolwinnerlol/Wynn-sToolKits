@@ -318,6 +318,20 @@ class WYNN_OT_open_playblast_folder(bpy.types.Operator):
             
         return {'FINISHED'}
 
+class WYNN_OT_check_updates(bpy.types.Operator):
+    """Check for updates from the extensions repository"""
+    bl_idname = "wynn.check_updates"
+    bl_label = "Check for Updates"
+    bl_description = "Force check for updates in the repositories"
+    
+    def execute(self, context):
+        if hasattr(bpy.ops.extensions, "repo_sync_all"):
+             bpy.ops.extensions.repo_sync_all()
+             self.report({'INFO'}, "Repositories Synced (Check Status Bar for Updates).")
+        else:
+             self.report({'WARNING'}, "Extension system not available.")
+        return {'FINISHED'}
+
 # -------------------------------------------------------------------
 #   Parent Panel
 # -------------------------------------------------------------------
@@ -350,6 +364,9 @@ class WYNN_PT_main_panel(bpy.types.Panel):
         row = layout.row()
         row.label(text=f"สวัสดีจ้า, {prefs.user_name}!", icon='USER')
         row.operator("wynn.setup_wizard", text="", icon='PREFERENCES').user_name = prefs.user_name
+        
+        # Check Updates Button
+        layout.operator("wynn.check_updates", text="Check Updates", icon='URL')
 
 # -------------------------------------------------------------------
 #   Sub Panels (Tabs)
@@ -621,6 +638,7 @@ classes_to_register = [
     WYNN_OT_open_playblast_folder,
     WA_PG_viewport_storage,
     WYNN_PG_rig_props,
+    WYNN_OT_check_updates,
 
 ]
 
@@ -679,15 +697,17 @@ def register():
             prefs.enable_extra = roles.get("enable_extra", True)
             print("Wynn's Toolkits: Config loaded.")
 
+    # Register the custom repository
+    register_repo()
 
     
     print(r"""
- _       __                 _          ______            ____ __ _ __          ___  ______
-| |     / /_  ______  ____ ( )_____   /_  __/___  ____  / / //_/(_) /______   <  / / ____/
-| | /| / / / / / __ \/ __ \|// ___/    / / / __ \/ __ \/ / ,<  / / __/ ___/   / / /___ \  
-| |/ |/ / /_/ / / / / / / / (__  )    / / / /_/ / /_/ / / /| |/ / /_(__  )   / / ____/ /  
-|__/|__/\__, /_/ /_/_/ /_/ /____/    /_/  \____/\____/_/_/ |_/_/\__/____/   /_(_)_____/   
-       /____/                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+ _       __                 _          ______            ____ __ _ __          ___  ______ ___
+| |     / /_  ______  ____ ( )_____   /_  __/___  ____  / / //_/(_) /______   <  / / ____/<  /
+| | /| / / / / / __ \/ __ \|// ___/    / / / __ \/ __ \/ / ,<  / / __/ ___/   / / /___ \  / / 
+| |/ |/ / /_/ / / / / / / / (__  )    / / / /_/ / /_/ / / /| |/ / /_(__  )   / / ____/ / / /  
+|__/|__/\__, /_/ /_/_/ /_/ /____/    /_/  \____/\____/_/_/ |_/_/\__/____/   /_(_)_____(_)_/   
+       /____/                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
     """)
 
 
@@ -714,3 +734,67 @@ def unregister():
 
 if __name__ == "__main__":
     register()
+
+
+def register_repo():
+    """Registers the local extension repository if it doesn't exist."""
+    try:
+        # Check if we are in Blender 4.2+ where extensions exist
+        if not hasattr(bpy.context.preferences, "extensions"):
+            return
+
+        repo_url = "file:///X:/My%20Drive/80_Resources/Blender%20Addons/index.json"
+        repo_name = "Wynn's Resources"
+        
+        # Check if already registered
+        repos = bpy.context.preferences.extensions.repos
+        for repo in repos:
+            if repo.remote_url == repo_url:
+                return # Already exists
+            if repo.name == repo_name:
+                # Name collision, maybe update URL? for now just skip
+                return
+
+        # Add the repository
+        # We need to run this in a way that doesn't fail if context is incorrect, though register runs early.
+        # bpy.ops.extensions.repo_create is the operator.
+        # NOTE: Operators might not work during registration if they rely on context.
+        # However, for preferences it often works. If not, we might need a timer.
+        
+        # Using a timer to ensure context is ready
+        def _add_repo_deferred():
+            if repo_name not in bpy.context.preferences.extensions.repos:
+                try:
+                    # Try using the direct collection API first (safer than operators)
+                    repos = bpy.context.preferences.extensions.repos
+                    
+                    # Check if .new() exists
+                    if hasattr(repos, "new"):
+                        repo = repos.new(name=repo_name)
+                        repo.remote_url = repo_url
+                        # repo.use_custom_url = True # This attribute does not exist on the object
+                        print(f"Wynn's Toolkits: Registered repository '{repo_name}' via API")
+                    else:
+                        # Fallback to operator if .new() is not available (unlikely for collection properties)
+                        # or if the API requires an operator.
+                        # Also check if the operator exists before calling
+                        if hasattr(bpy.ops.extensions, "repo_create"):
+                            bpy.ops.extensions.repo_create(
+                                name=repo_name,
+                                provider_id='BUILTIN', 
+                                remote_url=repo_url,
+                                use_custom_url=True
+                            )
+                            print(f"Wynn's Toolkits: Registered repository '{repo_name}' via Operator")
+                        else:
+                             print("Wynn's Toolkits: Could not find method to register repository.")
+                    
+                except Exception as e:
+                    print(f"Wynn's Toolkits: Failed to register repo: {e}")
+            return None
+
+        # Run slightly later
+        bpy.app.timers.register(_add_repo_deferred, first_interval=1.0)
+
+    except Exception as e:
+        print(f"Wynn's Toolkits: Error in register_repo: {e}")
